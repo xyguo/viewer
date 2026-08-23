@@ -183,7 +183,13 @@ UV_CACHE_DIR=.uv-cache uv run book-viewer-schema --output schemas/book.schema.js
 
 ## Quality gates
 
-Run every required gate with:
+Install the repository's pre-commit hook once after setup:
+
+```sh
+UV_CACHE_DIR=.uv-cache uv run pre-commit install
+```
+
+Every commit then runs the complete project quality gate. Run the same gate manually with:
 
 ```sh
 scripts/check.sh
