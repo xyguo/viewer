@@ -12,7 +12,11 @@ from book_viewer.server import create_server
 from book_viewer.settings import ServerSettings
 
 
-def test_default_settings_make_no_provider_assumptions(monkeypatch: MonkeyPatch) -> None:
+def test_default_settings_make_no_provider_assumptions(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
     for name in (
         "VIEWER_HOST",
         "VIEWER_PORT",
@@ -33,6 +37,7 @@ def test_default_settings_make_no_provider_assumptions(monkeypatch: MonkeyPatch)
 
 
 def test_settings_parse_documented_environment(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("VIEWER_HOST", "localhost")
     monkeypatch.setenv("VIEWER_PORT", "8123")
     monkeypatch.setenv("VIEWER_STATIC_ROOT", str(tmp_path))
@@ -59,7 +64,11 @@ def test_settings_parse_documented_environment(monkeypatch: MonkeyPatch, tmp_pat
     }
 
 
-def test_settings_support_custom_api_key_headers(tmp_path: Path) -> None:
+def test_settings_support_custom_api_key_headers(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
     settings = ServerSettings(
         static_root=tmp_path,
         chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
@@ -71,7 +80,8 @@ def test_settings_support_custom_api_key_headers(tmp_path: Path) -> None:
     assert settings.request_headers()["api-key"] == "secret"
 
 
-def test_settings_reject_invalid_values() -> None:
+def test_settings_reject_invalid_values(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
     with pytest.raises(ValidationError, match="less than or equal to 65535"):
         ServerSettings(port=70_000)
     with pytest.raises(ValidationError, match="surrounding whitespace"):
@@ -102,7 +112,8 @@ def test_settings_reject_invalid_values() -> None:
         )
 
 
-def test_server_requires_existing_static_root(tmp_path: Path) -> None:
+def test_server_requires_existing_static_root(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
     settings = ServerSettings(static_root=tmp_path / "missing", port=0)
     with pytest.raises(FileNotFoundError, match="static root"):
         create_server(settings)
