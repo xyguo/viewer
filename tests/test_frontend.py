@@ -70,6 +70,10 @@ def test_reader_links_back_to_catalog_and_bootstrap_routes_by_book() -> None:
     assert "showCatalog();" in bootstrap
     assert "link.href = `?book=${encodeURIComponent(slug)}`" in bootstrap
     assert "typeset: false" in bootstrap
+    assert '"vendor/mathjax/es5/tex-chtml.js"' in bootstrap
+    assert "cdn.jsdelivr.net/npm/mathjax@3.2.2" in bootstrap
+    assert "PRELOADED_TEX_PACKAGES" in bootstrap
+    assert "loadMathJax(urlIndex + 1)" in bootstrap
     assert markup.by_id("previous-chapter").attributes["aria-label"] == "Previous chapter"
     assert markup.by_id("next-chapter").attributes["aria-label"] == "Next chapter"
 

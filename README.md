@@ -39,7 +39,7 @@ The repository does not contain books after a fresh clone. Restore or synchroniz
 
 ## Read a book
 
-Build at least one local external book, then open `index.html` directly. The startup page lists every built book in the local catalog; select a card to open its reader. The generated `document-data.js` contains only the book and chapter index. Source and target chapters load on demand from `document-data-chunks/`, and MathJax typesets only the current chapter. MathJax itself is loaded from a CDN, so typeset mathematics requires network access unless the distribution is vendored locally.
+Build at least one local external book, then open `index.html` directly. The startup page lists every built book in the local catalog; select a card to open its reader. The generated `document-data.js` contains only the book and chapter index. Source and target chapters load on demand from `document-data-chunks/`, and MathJax typesets only the current chapter. The reader prefers the optional thin local MathJax installation and falls back to the pinned CDN build when it is absent.
 
 `book-viewer-build` regenerates `books/catalog.js` from all valid local manifests that have browser data. Reader pages link back to the catalog. A specific book can also be opened directly with a query parameter:
 
@@ -112,7 +112,7 @@ Build a single platform-specific executable with:
 scripts/build-binary.sh
 ```
 
-The result is `dist/book-viewer`. Put the executable next to the external `books/` directory and run it directly:
+The result is `dist/book-viewer`. PyInstaller executables are platform-specific, so build once on each operating system and architecture you plan to distribute. Put the executable next to the external `books/` directory and run it directly:
 
 ```text
 release/
@@ -123,6 +123,18 @@ release/
 ```
 
 The executable contains the generic reader, Python runtime, and server dependencies. It deliberately does not contain book data. Set `VIEWER_BOOKS_ROOT` when the library is not next to the executable. As with the uv command, live translation remains optional and uses the same environment variables.
+
+## Install MathJax for fully offline reading
+
+Install the pinned minimal runtime with no Node.js dependency:
+
+```sh
+UV_CACHE_DIR=.uv-cache uv run book-viewer-install-mathjax
+```
+
+The installer verifies the MathJax 3.2.2 archive checksum and extracts only `tex-chtml.js`, its CommonHTML webfonts, the non-bundled TeX extensions requested by current `book.json` manifests, and the upstream license. The resulting `vendor/mathjax/` directory is approximately 1.5 MiB for the current library and is intentionally ignored by Git.
+
+Run the installer before `scripts/build-binary.sh` to embed this thin runtime into the standalone executable. Without it, both source mode and the executable retain the CDN fallback; with it, formulas render without network access.
 
 ## Add another book
 

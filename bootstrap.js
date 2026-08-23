@@ -2,7 +2,13 @@
   "use strict";
 
   const SUPPORTED_BOOK_SCHEMA_VERSION = 2;
-  const MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js";
+  const MATHJAX_URLS = [
+    "vendor/mathjax/es5/tex-chtml.js",
+    "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"
+  ];
+  const PRELOADED_TEX_PACKAGES = new Set([
+    "ams", "autoload", "configmacros", "newcommand", "noundefined", "require"
+  ]);
   const catalogPage = document.querySelector("#catalog-page");
   const catalogCount = document.querySelector("#catalog-count");
   const catalogAlert = document.querySelector("#catalog-alert");
@@ -20,7 +26,11 @@
     const packages = documentData.mathjax?.packages || [];
     const macros = documentData.mathjax?.macros || {};
     window.MathJax = {
-      loader: { load: packages.map((name) => `[tex]/${name}`) },
+      loader: {
+        load: packages
+          .filter((name) => !PRELOADED_TEX_PACKAGES.has(name.toLowerCase()))
+          .map((name) => `[tex]/${name}`)
+      },
       tex: {
         packages: { "[+]": packages },
         inlineMath: [["$", "$"], ["\\(", "\\)"]],
@@ -44,11 +54,16 @@
     };
   }
 
-  function loadMathJax() {
+  function loadMathJax(urlIndex = 0) {
     const script = document.createElement("script");
-    script.src = MATHJAX_URL;
+    script.src = MATHJAX_URLS[urlIndex];
     script.defer = true;
     script.onerror = () => {
+      script.remove();
+      if (urlIndex + 1 < MATHJAX_URLS.length) {
+        loadMathJax(urlIndex + 1);
+        return;
+      }
       console.error("MathJax could not be loaded; formulas will remain in LaTeX form.");
     };
     document.head.append(script);
