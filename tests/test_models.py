@@ -9,10 +9,12 @@ import pytest
 from pydantic import ValidationError
 
 from book_viewer.models import (
+    SUPPORTED_LIVE_TARGET_LANGUAGES,
     BookChapter,
     BookChunkPayload,
     BookDocumentPayload,
     BookManifest,
+    LiveTargetLanguage,
     MathJaxManifest,
     TocEntry,
     TranslationRequest,
@@ -189,3 +191,26 @@ def test_translation_request_normalizes_text_and_rejects_loose_input() -> None:
         TranslationRequest.model_validate({**request.model_dump(), "after": ["x"] * 5})
     with pytest.raises(ValidationError, match="must not be empty"):
         TranslationRequest.model_validate({**request.model_dump(), "sentence": "   "})
+
+
+@pytest.mark.parametrize("target_language", SUPPORTED_LIVE_TARGET_LANGUAGES)
+def test_translation_request_accepts_supported_live_target_languages(
+    target_language: LiveTargetLanguage,
+) -> None:
+    request = TranslationRequest(
+        sentence="Translate me.",
+        source_language="English",
+        target_language=target_language,
+    )
+    assert request.target_language == target_language
+
+
+def test_translation_request_rejects_unsupported_live_target_language() -> None:
+    with pytest.raises(ValidationError, match="Input should be"):
+        TranslationRequest.model_validate(
+            {
+                "sentence": "Translate me.",
+                "source_language": "English",
+                "target_language": "Klingon",
+            }
+        )

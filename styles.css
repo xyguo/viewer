@@ -429,6 +429,23 @@ button {
   opacity: 0.42;
 }
 
+.live-language-select {
+  min-width: 112px;
+  padding: 7px 30px 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--navy);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.live-language-select:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .chapter-controls {
   gap: 2px;
 }

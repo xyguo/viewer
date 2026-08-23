@@ -37,7 +37,13 @@ def running_server(
     translator: FakeTranslator | FailingTranslator | None,
 ) -> Generator[tuple[str, int]]:
     (tmp_path / "index.html").write_text("<h1>Reader</h1>", encoding="utf-8")
-    settings = ServerSettings(host="127.0.0.1", port=0, static_root=tmp_path)
+    settings = ServerSettings(
+        host="127.0.0.1",
+        port=0,
+        static_root=tmp_path,
+        chat_completions_url=None,
+        chat_model=None,
+    )
     server = create_server(settings, translator=translator)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -87,6 +93,18 @@ def test_server_translates_and_caches_identical_requests(tmp_path: Path) -> None
     assert len(translator.requests) == 1
 
 
+def test_server_caches_live_translations_per_target_language(tmp_path: Path) -> None:
+    translator = FakeTranslator()
+    french_payload = {**valid_payload(), "target_language": "French"}
+    with running_server(tmp_path, translator) as (host, port):
+        english_status, _english = post_json(host, port, "/api/translate", valid_payload())
+        french_status, _french = post_json(host, port, "/api/translate", french_payload)
+
+    assert english_status == 200
+    assert french_status == 200
+    assert [request.target_language for request in translator.requests] == ["English", "French"]
+
+
 def test_server_rejects_unknown_endpoint_and_invalid_schema(tmp_path: Path) -> None:
     translator = FakeTranslator()
     with running_server(tmp_path, translator) as (host, port):
@@ -97,6 +115,17 @@ def test_server_rejects_unknown_endpoint_and_invalid_schema(tmp_path: Path) -> N
     assert missing == {"error": "Endpoint not found."}
     assert invalid_status == 400
     assert "translation schema" in str(invalid["error"])
+    assert translator.requests == []
+
+
+def test_server_rejects_unsupported_live_target_language(tmp_path: Path) -> None:
+    translator = FakeTranslator()
+    invalid_payload = {**valid_payload(), "target_language": "Klingon"}
+    with running_server(tmp_path, translator) as (host, port):
+        status, response = post_json(host, port, "/api/translate", invalid_payload)
+
+    assert status == 400
+    assert "translation schema" in str(response["error"])
     assert translator.requests == []
 
 

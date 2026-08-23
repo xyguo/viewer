@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 
+from book_viewer.models import SUPPORTED_LIVE_TARGET_LANGUAGES
+
 
 @dataclass(frozen=True, slots=True)
 class Element:
@@ -93,3 +95,24 @@ def test_reader_loads_chapters_and_avoids_linear_scroll_scans() -> None:
     assert "function firstVisibleSegment(" in app
     assert "while (low <= high)" in app
     assert "originSegments.find" not in app
+
+
+def test_live_translation_exposes_supported_target_languages() -> None:
+    viewer_root = Path(__file__).resolve().parents[1]
+    markup = load_markup(viewer_root)
+    app = (viewer_root / "app.js").read_text(encoding="utf-8")
+
+    language_group = markup.by_id("live-language-controls")
+    language_select = markup.by_id("live-target-language")
+    option_values = [
+        element.attributes.get("value") for element in markup.elements if element.tag == "option"
+    ]
+
+    assert "hidden" in language_group.attributes
+    assert language_select.attributes["aria-label"] == "Live translation target language"
+    assert option_values == list(SUPPORTED_LIVE_TARGET_LANGUAGES)
+    assert "state.liveTargetLanguage" in app
+    assert "const targetLanguage = state.liveTargetLanguage;" in app
+    assert "target_language: targetLanguage" in app
+    assert 'liveTargetLanguageSelect.addEventListener("change"' in app
+    assert "book-viewer-live:${data.slug}:${targetLanguage}" in app

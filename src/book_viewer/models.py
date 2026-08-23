@@ -258,6 +258,26 @@ class CatalogBuildResult(StrictModel):
 MAX_SENTENCE_CHARS = 4_000
 MAX_CONTEXT_ITEMS = 4
 MAX_LANGUAGE_CHARS = 80
+LiveTargetLanguage = Literal[
+    "Chinese",
+    "English",
+    "French",
+    "Japanese",
+    "Spanish",
+    "German",
+    "Portuguese",
+    "Italian",
+]
+SUPPORTED_LIVE_TARGET_LANGUAGES: tuple[LiveTargetLanguage, ...] = (
+    "Chinese",
+    "English",
+    "French",
+    "Japanese",
+    "Spanish",
+    "German",
+    "Portuguese",
+    "Italian",
+)
 
 
 def _normalized_text(value: str) -> str:
@@ -271,9 +291,9 @@ class TranslationRequest(StrictModel):
     before: list[str] = Field(default_factory=list, max_length=MAX_CONTEXT_ITEMS)
     after: list[str] = Field(default_factory=list, max_length=MAX_CONTEXT_ITEMS)
     source_language: str = Field(min_length=1, max_length=MAX_LANGUAGE_CHARS)
-    target_language: str = Field(min_length=1, max_length=MAX_LANGUAGE_CHARS)
+    target_language: LiveTargetLanguage
 
-    @field_validator("sentence", "source_language", "target_language")
+    @field_validator("sentence", "source_language")
     @classmethod
     def normalize_text(cls, value: str) -> str:
         normalized = _normalized_text(value)

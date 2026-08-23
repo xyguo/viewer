@@ -17,6 +17,8 @@
   const countLabel = document.querySelector("#segment-count");
   const statusLabel = document.querySelector("#reader-status");
   const modeNote = document.querySelector("#mode-note");
+  const liveLanguageControls = document.querySelector("#live-language-controls");
+  const liveTargetLanguageSelect = document.querySelector("#live-target-language");
   const chapterPosition = document.querySelector("#chapter-position");
   const previousChapter = document.querySelector("#previous-chapter");
   const nextChapter = document.querySelector("#next-chapter");
@@ -45,6 +47,7 @@
     popoverAnchor: null,
     popoverReturnFocus: null,
     tocOpen: false,
+    liveTargetLanguage: "English",
     liveRequestId: 0,
     liveController: null,
     chapterRequestId: 0,
@@ -79,6 +82,13 @@
     targetViewButton.textContent = data.targetLabel;
     sourceContent.lang = data.sourceHtmlLang;
     targetContent.lang = data.targetHtmlLang;
+    const supportedLiveLanguages = [...liveTargetLanguageSelect.options].map(
+      (option) => option.value
+    );
+    state.liveTargetLanguage = supportedLiveLanguages.includes(data.targetLanguage)
+      ? data.targetLanguage
+      : "English";
+    liveTargetLanguageSelect.value = state.liveTargetLanguage;
     indexChapters();
     buildToc();
     installEvents();
@@ -177,6 +187,10 @@
 
     document.querySelectorAll("[data-view-choice]").forEach((button) => {
       button.addEventListener("click", () => setView(button.dataset.viewChoice));
+    });
+
+    liveTargetLanguageSelect.addEventListener("change", () => {
+      setLiveTargetLanguage(liveTargetLanguageSelect.value);
     });
 
     [sourceContent, targetContent].forEach((container) => {
@@ -308,7 +322,7 @@
       updateCurrentTocForSegment(segmentId || chapter.segmentIds[0]);
       shell.classList.remove("is-loading-chapter");
       shell.removeAttribute("aria-busy");
-      statusLabel.textContent = state.mode === "online" ? "Live translation" : "Offline edition";
+      updateModeCopy();
 
       await typesetCurrentChapter(requestId);
       if (requestId !== state.chapterRequestId) return;
@@ -443,16 +457,39 @@
     if (mode === "online") {
       state.offlineView = state.view;
       applyView("source");
-      statusLabel.textContent = "Live translation";
-      modeNote.textContent = `Click a ${data.sourceLanguage} sentence to translate it with nearby context. Live mode requires the reader server and a configured Chat Completions service.`;
     } else {
       applyView(state.offlineView || "both");
-      statusLabel.textContent = "Offline edition";
-      modeNote.textContent = "Scroll either column. Click a sentence to align and highlight its counterpart.";
     }
 
+    updateModeCopy();
     updateControls();
     requestAnimationFrame(updateVisibleProgress);
+  }
+
+  function setLiveTargetLanguage(language) {
+    const supported = [...liveTargetLanguageSelect.options].some(
+      (option) => option.value === language
+    );
+    if (!supported) {
+      liveTargetLanguageSelect.value = state.liveTargetLanguage;
+      return;
+    }
+    if (language === state.liveTargetLanguage) return;
+
+    cancelLiveTranslation();
+    hidePopover(false);
+    state.liveTargetLanguage = language;
+    updateModeCopy();
+  }
+
+  function updateModeCopy() {
+    if (state.mode === "online") {
+      statusLabel.textContent = `Live translation to ${state.liveTargetLanguage}`;
+      modeNote.textContent = `Click a ${data.sourceLanguage} sentence to translate it into ${state.liveTargetLanguage} with nearby context. Live mode requires the reader server and a configured Chat Completions service.`;
+      return;
+    }
+    statusLabel.textContent = "Offline edition";
+    modeNote.textContent = "Scroll either column. Click a sentence to align and highlight its counterpart.";
   }
 
   function setView(view, forced = false) {
@@ -484,6 +521,7 @@
       button.setAttribute("aria-pressed", String(selected));
       button.disabled = state.mode === "online";
     });
+    liveLanguageControls.hidden = state.mode !== "online";
   }
 
   function onPaneScroll(language) {
@@ -656,11 +694,12 @@
     const sentence = segment.dataset.plainText || normalizeText(segment.textContent);
     const before = list.slice(Math.max(0, index - 2), index).map(segmentText);
     const after = list.slice(index + 1, index + 3).map(segmentText);
-    const cacheKey = `book-viewer-live:${data.slug}:${segment.dataset.seg}:${simpleHash(JSON.stringify([sentence, before, after]))}`;
+    const targetLanguage = state.liveTargetLanguage;
+    const cacheKey = `book-viewer-live:${data.slug}:${targetLanguage}:${segment.dataset.seg}:${simpleHash(JSON.stringify([sentence, before, after]))}`;
     const cached = storageGet(cacheKey);
 
     if (cached) {
-      if (requestId === state.liveRequestId) showLiveTranslation(segment, cached);
+      if (requestId === state.liveRequestId) showLiveTranslation(segment, targetLanguage, cached);
       return;
     }
 
@@ -678,15 +717,18 @@
           before,
           after,
           source_language: data.sourceLanguage,
-          target_language: data.targetLanguage
+          target_language: targetLanguage
         })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || `Translation request failed (${response.status})`);
       if (!payload.translation) throw new Error("The translation service returned an empty response.");
       storageSet(cacheKey, payload.translation);
-      if (requestId === state.liveRequestId && state.mode === "online" && state.activeId === segment.dataset.seg) {
-        showLiveTranslation(segment, payload.translation);
+      if (requestId === state.liveRequestId
+        && state.mode === "online"
+        && state.liveTargetLanguage === targetLanguage
+        && state.activeId === segment.dataset.seg) {
+        showLiveTranslation(segment, targetLanguage, payload.translation);
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -704,10 +746,10 @@
     state.liveRequestId += 1;
   }
 
-  function showLiveTranslation(segment, translation) {
+  function showLiveTranslation(segment, targetLanguage, translation) {
     const paragraph = document.createElement("p");
     paragraph.textContent = translation;
-    showPopover(segment, `Live ${data.targetLabel} translation`, paragraph.outerHTML, false);
+    showPopover(segment, `Live ${targetLanguage} translation`, paragraph.outerHTML, false);
   }
 
   function showPopover(anchor, label, html, alreadyTypeset) {

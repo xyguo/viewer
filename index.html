@@ -78,6 +78,24 @@
           <button class="segmented-button" type="button" data-mode-choice="online" aria-pressed="false">Live translation</button>
         </div>
 
+        <div class="control-group live-language-controls" id="live-language-controls" hidden>
+          <label class="control-label" for="live-target-language">Target</label>
+          <select
+            class="live-language-select"
+            id="live-target-language"
+            aria-label="Live translation target language"
+          >
+            <option value="Chinese">Chinese</option>
+            <option value="English">English</option>
+            <option value="French">French</option>
+            <option value="Japanese">Japanese</option>
+            <option value="Spanish">Spanish</option>
+            <option value="German">German</option>
+            <option value="Portuguese">Portuguese</option>
+            <option value="Italian">Italian</option>
+          </select>
+        </div>
+
         <div class="control-group view-controls" aria-label="Visible languages">
           <span class="control-label">View</span>
           <button class="segmented-button is-selected" type="button" data-view-choice="both" aria-pressed="true">Side by side</button>

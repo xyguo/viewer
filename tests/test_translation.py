@@ -12,7 +12,7 @@ from typing import Self
 import pytest
 from pydantic import AnyHttpUrl, SecretStr
 
-from book_viewer.models import TranslationRequest
+from book_viewer.models import LiveTargetLanguage, TranslationRequest
 from book_viewer.settings import ServerSettings
 from book_viewer.translation import (
     OpenAICompatibleTranslator,
@@ -56,13 +56,13 @@ class FakeUrlOpen:
         return self.response
 
 
-def translation_request() -> TranslationRequest:
+def translation_request(target_language: LiveTargetLanguage = "English") -> TranslationRequest:
     return TranslationRequest(
         sentence="これは文です。",
         before=["前の文です。"],
         after=["次の文です。"],
         source_language="Japanese",
-        target_language="English",
+        target_language=target_language,
     )
 
 
@@ -80,7 +80,7 @@ def test_chat_request_uses_context_without_authorization(tmp_path: Path) -> None
     )
     translator = OpenAICompatibleTranslator(settings, urlopen=opener)
 
-    assert translator.translate(translation_request()) == "Translated."
+    assert translator.translate(translation_request("French")) == "Translated."
     request, timeout = opener.requests[0]
     assert request.full_url == "http://localhost:8080/v1/chat/completions"
     assert timeout == 12.5
@@ -89,6 +89,10 @@ def test_chat_request_uses_context_without_authorization(tmp_path: Path) -> None
     payload = json.loads(request.data)
     assert payload["model"] == "configured-model"
     assert payload["messages"][1]["content"] == "これは文です。"
+    assert (
+        "Translate exactly one sentence from Japanese to French."
+        in (payload["messages"][0]["content"])
+    )
     assert "前の文です。" in payload["messages"][0]["content"]
     assert "次の文です。" in payload["messages"][0]["content"]
     assert payload["stream"] is False
@@ -150,7 +154,13 @@ def test_chat_client_reports_connection_failure(tmp_path: Path) -> None:
 
 def test_unconfigured_translator_returns_service_unavailable(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="URL and model"):
-        OpenAICompatibleTranslator(ServerSettings(static_root=tmp_path))
+        OpenAICompatibleTranslator(
+            ServerSettings(
+                static_root=tmp_path,
+                chat_completions_url=None,
+                chat_model=None,
+            )
+        )
 
     with pytest.raises(TranslationError) as error_info:
         UnconfiguredTranslator().translate(translation_request())
