@@ -12,7 +12,8 @@ viewer/
 │   └── <slug>/
 │       ├── book.json                            # local versioned manifest
 │       ├── source.md, target.md                 # local paired editions
-│       ├── document-data.js                     # generated browser payload
+│       ├── document-data.js                     # generated chapter index
+│       ├── document-data-chunks/                # generated edition chapters
 │       └── assets/                              # local book-specific files
 ├── schemas/book.schema.json                     # tracked metadata contract
 ├── src/book_viewer/                             # typed builder and local server
@@ -38,7 +39,7 @@ The repository does not contain books after a fresh clone. Restore or synchroniz
 
 ## Read a book
 
-Build at least one local external book, then open `index.html` directly. The startup page lists every built book in the local catalog; select a card to open its reader. The complete source and target editions are embedded in the selected book's generated `document-data.js`. MathJax is loaded from a CDN, so typeset mathematics requires network access unless the script is vendored locally.
+Build at least one local external book, then open `index.html` directly. The startup page lists every built book in the local catalog; select a card to open its reader. The generated `document-data.js` contains only the book and chapter index. Source and target chapters load on demand from `document-data-chunks/`, and MathJax typesets only the current chapter. MathJax itself is loaded from a CDN, so typeset mathematics requires network access unless the distribution is vendored locally.
 
 `book-viewer-build` regenerates `books/catalog.js` from all valid local manifests that have browser data. Reader pages link back to the catalog. A specific book can also be opened directly with a query parameter:
 
@@ -112,7 +113,7 @@ The manifest must declare the current schema version. The optional `$schema` fie
 ```json
 {
   "$schema": "../../schemas/book.schema.json",
-  "schema_version": 1,
+  "schema_version": 2,
   "slug": "another-book",
   "title": "Another Book",
   "reader_title": "Another Book Reader",
@@ -148,7 +149,7 @@ Both Markdown editions must use matching wrappers such as:
 <span class="segment" data-seg="chapter-01-sentence-0001">Sentence text.</span>
 ```
 
-The boundary rule is intentionally mechanical: headings and captions are one segment, prose is split at ordinary sentence-final punctuation, and a display formula remains one block between neighboring prose segments. Only the ordered `data-seg` values define the mapping. The builder rejects missing, duplicate, or differently ordered IDs, mismatched equation tags, mismatched figures, and missing local assets.
+The boundary rule is intentionally mechanical: headings and captions are one segment, prose is split at ordinary sentence-final punctuation, and a display formula remains one block between neighboring prose segments. Only the ordered `data-seg` values define the mapping. Every top-level `h1` starts an independently loadable chapter, so the two editions must also have matching `h1` boundaries. The builder rejects missing, duplicate, or differently ordered IDs, mismatched chapter boundaries, mismatched equation tags, mismatched figures, and missing local assets.
 
 Put book-specific figures under `books/<slug>/assets/` and reference them as `assets/...` from both Markdown files. `asset_rewrites` maps those local Markdown paths to paths relative to the generic `index.html`.
 
@@ -164,7 +165,7 @@ Equation numbers written with LaTeX `\tag{...}` are preserved and checked across
 
 ## Metadata compatibility
 
-`schema_version` is required and the browser payload carries the same version. The viewer rejects stale catalogs or generated document data instead of attempting to interpret an incompatible format.
+`schema_version` is required, and the catalog, chapter index, and chapter payloads carry the same version. The viewer rejects stale generated data instead of attempting to interpret an incompatible format.
 
 The canonical contract is [schemas/book.schema.json](schemas/book.schema.json). It is generated from the strict Pydantic `BookManifest` model, and the test suite fails if the tracked schema drifts from the application model.
 
