@@ -1,52 +1,152 @@
-# PCP Proof Reader
+# Parallel Book Viewer
 
-This is a lightweight, zero-build reader for the Japanese and English editions of *Proof of the PCP Theorem*.
+Parallel Book Viewer is a lightweight, sentence-aligned reader for translated books. The browser application and Python tooling are book-independent. Each book supplies only a strict manifest, generated document data, and its assets under `books/`.
 
-## Open the offline reader
+The bundled book is the Japanese and English edition of *Proof of the PCP Theorem*.
 
-Open `index.html` directly in a browser. Both full documents are already embedded in `document-data.js`, so the Markdown files do not need to be fetched at runtime. MathJax is loaded from a CDN; an internet connection is needed for typeset mathematics unless you replace that script with a local MathJax copy.
+## Project layout
 
-The offline reader supports:
+```text
+viewer/
+├── app.js, bootstrap.js, index.html, styles.css  # generic static reader
+├── books/
+│   ├── catalog.js                               # available books
+│   └── proof-of-pcp/                            # one isolated book package
+│       ├── book.json                            # source and presentation manifest
+│       ├── document-data.js                     # generated browser payload
+│       └── assets/                              # book-specific figures
+├── src/book_viewer/                             # typed builder and local server
+├── tests/                                       # Python unit and HTTP tests
+├── pyproject.toml                               # dependencies and quality policy
+└── uv.lock                                      # reproducible dependency lock
+```
 
-- sentence-aligned side-by-side reading;
-- synchronized scrolling using the first visible sentence as the anchor;
-- click-to-highlight and click-to-align behavior;
-- Japanese-only and English-only reading with counterpart popovers;
-- chapter and section navigation; and
-- responsive keyboard-accessible controls.
+## Set up the project
 
-## Sentence mapping
+Install [uv](https://docs.astral.sh/uv/), then run:
 
-Both Markdown files use matching `<span class="segment" data-seg="...">` wrappers. The boundary rule is intentionally mechanical: headings and captions are one segment, while prose is split at ordinary Japanese or English sentence-final punctuation. A display formula is kept as one block between its surrounding prose segments. The same `data-seg` value identifies each Japanese unit and its English counterpart.
+```sh
+cd /Users/xyguo/Programs/Study/Language/textbook/viewer
+UV_CACHE_DIR=.uv-cache uv sync --all-groups --locked
+```
+
+uv creates and manages the project-specific `.venv` automatically. Python dependencies must not be installed globally.
+
+Pandoc is also required when rebuilding a book. It is a build-time executable, not a Python or browser dependency.
+
+## Read a book
+
+For offline mode, open `index.html` directly. The complete source and target editions are embedded in the selected book's `document-data.js`. MathJax is loaded from a CDN, so typeset mathematics requires network access unless the script is vendored locally.
+
+The default book comes from `books/catalog.js`. Select another catalog entry with a query parameter:
+
+```text
+index.html?book=another-book
+```
+
+The reader supports synchronized scrolling, sentence highlighting, counterpart popovers in one-language mode, and chapter navigation.
 
 ## Use live translation
 
-Live mode uses a tiny local Python server as a same-origin proxy to a llama.cpp server exposed through an SSH tunnel. By default, it calls `http://127.0.0.1:8080/v1/chat/completions` with the model `tencent-hy-mt`. No API key is required.
-
-First establish the SSH tunnel so the remote llama.cpp service is available on local port `8080`. Then start the reader server:
+Live mode needs the local server because browsers must not call the translation backend directly. Start the SSH tunnel that maps the remote llama.cpp service to local port `8080`, then run:
 
 ```sh
-cd /Users/xyguo/Programs/Study/Language/textbook/viewer
-python3 server.py
+UV_CACHE_DIR=.uv-cache uv run book-viewer-serve
 ```
 
-Open `http://127.0.0.1:8000` and select **Live translation**. The server sends the clicked Japanese sentence plus up to two sentences on either side as context, while requesting output for only the clicked sentence.
+Open `http://127.0.0.1:8000`. The default backend is:
 
-The backend can be overridden when needed:
+- endpoint: `http://127.0.0.1:8080/v1/chat/completions`
+- model: `tencent-hy-mt`
+- authentication: none
+
+The clicked source sentence is the only user message. Up to two neighboring sentences on each side are included in the system message as translation context.
+
+Runtime settings can be overridden with environment variables:
 
 ```sh
-LLAMA_CPP_BASE_URL="http://127.0.0.1:8080/v1" \
-TRANSLATION_MODEL="tencent-hy-mt" \
-python3 server.py
+VIEWER_HOST=127.0.0.1 \
+VIEWER_PORT=8000 \
+LLAMA_CPP_BASE_URL=http://127.0.0.1:8080/v1 \
+TRANSLATION_MODEL=tencent-hy-mt \
+TRANSLATION_TIMEOUT_SECONDS=90 \
+UV_CACHE_DIR=.uv-cache \
+uv run book-viewer-serve
 ```
 
-## Rebuild after editing the Markdown
+## Add another book
 
-The delivered page is already built. To regenerate its embedded document data after editing either Markdown file, run:
+Create `books/<slug>/book.json`. All book-specific values, including titles, language labels, Markdown paths, asset mapping, and MathJax macros, belong in this file.
+
+```json
+{
+  "slug": "another-book",
+  "title": "Another Book",
+  "reader_title": "Another Book Reader",
+  "description": "A sentence-aligned source and translation.",
+  "source": {
+    "language": "Japanese",
+    "label": "日本語",
+    "html_lang": "ja",
+    "markdown": "../../../another-book-jp.md",
+    "html_id_prefix": "source"
+  },
+  "target": {
+    "language": "English",
+    "label": "English",
+    "html_lang": "en",
+    "markdown": "../../../another-book-en.md",
+    "html_id_prefix": "target"
+  },
+  "data_file": "document-data.js",
+  "asset_rewrites": {
+    "viewer/assets/": "books/another-book/assets/"
+  },
+  "mathjax": {
+    "packages": ["ams"],
+    "macros": {}
+  }
+}
+```
+
+Both Markdown editions must use matching wrappers such as:
+
+```html
+<span class="segment" data-seg="chapter-01-sentence-0001">Sentence text.</span>
+```
+
+The boundary rule is intentionally mechanical: headings and captions are one segment, prose is split at ordinary sentence-final punctuation, and a display formula remains one block between neighboring prose segments. Only the ordered `data-seg` values define the mapping. The builder rejects missing, duplicate, or differently ordered IDs, mismatched equation tags, mismatched figures, and missing local assets.
+
+Put book-specific figures under `books/<slug>/assets/`. `asset_rewrites` maps paths found in the Markdown to paths relative to the generic `index.html`.
+
+Add the new slug and generated data path to `books/catalog.js`, then build it:
 
 ```sh
-cd /Users/xyguo/Programs/Study/Language/textbook/viewer
-python3 build_data.py
+UV_CACHE_DIR=.uv-cache uv run book-viewer-build --manifest books/another-book/book.json
 ```
 
-The rebuild script validates that the Japanese and English files have exactly the same ordered `data-seg` identifiers, then uses Pandoc to render their controlled Markdown into static HTML. Pandoc is a build-time tool only; the finished reader has no Node.js or Python runtime dependency in offline mode.
+Equation numbers written with LaTeX `\tag{...}` are preserved and checked across both editions.
+
+## Quality gates
+
+Run every required gate with:
+
+```sh
+scripts/check.sh
+```
+
+The gate performs:
+
+- Ruff formatting verification and linting;
+- Pyright in strict mode;
+- Pytest with branch coverage; and
+- an 80% minimum total coverage threshold enforced by `pyproject.toml`.
+
+Individual commands are also available:
+
+```sh
+UV_CACHE_DIR=.uv-cache uv run --offline ruff format --check src tests
+UV_CACHE_DIR=.uv-cache uv run --offline ruff check src tests
+UV_CACHE_DIR=.uv-cache uv run --offline pyright
+UV_CACHE_DIR=.uv-cache uv run --offline pytest
+```
