@@ -104,6 +104,26 @@ Provider configuration:
 
 For example, a service expecting `api-key: <key>` can use `LLM_API_KEY_HEADER=api-key` and an empty `LLM_API_KEY_SCHEME`. No provider SDK is required.
 
+## Build a standalone executable
+
+Build a single platform-specific executable with:
+
+```sh
+scripts/build-binary.sh
+```
+
+The result is `dist/book-viewer`. Put the executable next to the external `books/` directory and run it directly:
+
+```text
+release/
+├── book-viewer
+└── books/
+    ├── catalog.js
+    └── <slug>/
+```
+
+The executable contains the generic reader, Python runtime, and server dependencies. It deliberately does not contain book data. Set `VIEWER_BOOKS_ROOT` when the library is not next to the executable. As with the uv command, live translation remains optional and uses the same environment variables.
+
 ## Add another book
 
 Create `books/<slug>/` and keep its source Markdown, target Markdown, assets, manifest, and generated browser data together. All of it remains local and ignored by Git.

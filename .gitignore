@@ -1,5 +1,7 @@
 .venv/
 .uv-cache/
+/build/
+/dist/
 .env
 /books/*
 !/books/.gitkeep

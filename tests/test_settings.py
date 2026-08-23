@@ -21,6 +21,7 @@ def test_default_settings_make_no_provider_assumptions(
         "VIEWER_HOST",
         "VIEWER_PORT",
         "VIEWER_STATIC_ROOT",
+        "VIEWER_BOOKS_ROOT",
         "LLM_CHAT_COMPLETIONS_URL",
         "LLM_MODEL",
         "LLM_API_KEY",
@@ -41,6 +42,7 @@ def test_settings_parse_documented_environment(monkeypatch: MonkeyPatch, tmp_pat
     monkeypatch.setenv("VIEWER_HOST", "localhost")
     monkeypatch.setenv("VIEWER_PORT", "8123")
     monkeypatch.setenv("VIEWER_STATIC_ROOT", str(tmp_path))
+    monkeypatch.setenv("VIEWER_BOOKS_ROOT", str(tmp_path / "library"))
     monkeypatch.setenv(
         "LLM_CHAT_COMPLETIONS_URL",
         "https://provider.example/api/v1/chat/completions",
@@ -52,6 +54,7 @@ def test_settings_parse_documented_environment(monkeypatch: MonkeyPatch, tmp_pat
     assert settings.host == "localhost"
     assert settings.port == 8123
     assert settings.static_root == tmp_path
+    assert settings.books_root == tmp_path / "library"
     assert settings.chat_completions_endpoint == (
         "https://provider.example/api/v1/chat/completions"
     )

@@ -41,6 +41,7 @@ def running_server(
         host="127.0.0.1",
         port=0,
         static_root=tmp_path,
+        books_root=tmp_path / "books",
         chat_completions_url=None,
         chat_model=None,
     )
@@ -156,6 +157,43 @@ def test_server_serves_static_files_with_security_headers(tmp_path: Path) -> Non
     assert body == "<h1>Reader</h1>"
     assert headers["Referrer-Policy"] == "no-referrer"
     assert headers["X-Frame-Options"] == "SAMEORIGIN"
+
+
+def test_server_serves_external_books_from_a_separate_root(tmp_path: Path) -> None:
+    static_root = tmp_path / "static"
+    books_root = tmp_path / "library"
+    static_root.mkdir()
+    books_root.mkdir()
+    (static_root / "index.html").write_text("Viewer", encoding="utf-8")
+    (books_root / "catalog.js").write_text("Catalog", encoding="utf-8")
+    (tmp_path / "secret.txt").write_text("Secret", encoding="utf-8")
+    settings = ServerSettings(
+        host="127.0.0.1",
+        port=0,
+        static_root=static_root,
+        books_root=books_root,
+    )
+    server = create_server(settings, translator=FakeTranslator())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address[:2]
+    try:
+        connection = http.client.HTTPConnection(str(host), int(port), timeout=2)
+        connection.request("GET", "/books/catalog.js")
+        response = connection.getresponse()
+        body = response.read().decode()
+        connection.request("GET", "/books/%2e%2e/secret.txt")
+        traversal_response = connection.getresponse()
+        traversal_response.read()
+        connection.close()
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert response.status == 200
+    assert body == "Catalog"
+    assert traversal_response.status == 404
 
 
 def test_server_type_is_explicit(tmp_path: Path) -> None:

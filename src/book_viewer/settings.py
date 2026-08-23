@@ -3,13 +3,31 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 from typing import Self
 
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_STATIC_ROOT = Path(__file__).resolve().parents[2]
+
+def _running_frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
+def _default_static_root() -> Path:
+    module_path = Path(__file__).resolve()
+    return module_path.parents[1] if _running_frozen() else module_path.parents[2]
+
+
+def _default_books_root(static_root: Path) -> Path:
+    if _running_frozen():
+        return Path(sys.executable).resolve().parent / "books"
+    return static_root / "books"
+
+
+DEFAULT_STATIC_ROOT = _default_static_root()
+DEFAULT_BOOKS_ROOT = _default_books_root(DEFAULT_STATIC_ROOT)
 HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 
@@ -29,6 +47,7 @@ class ServerSettings(BaseSettings):
     host: str = Field(default="127.0.0.1", validation_alias="VIEWER_HOST", min_length=1)
     port: int = Field(default=8000, validation_alias="VIEWER_PORT", ge=0, le=65_535)
     static_root: Path = Field(default=DEFAULT_STATIC_ROOT, validation_alias="VIEWER_STATIC_ROOT")
+    books_root: Path = Field(default=DEFAULT_BOOKS_ROOT, validation_alias="VIEWER_BOOKS_ROOT")
     chat_completions_url: AnyHttpUrl | None = Field(
         default=None,
         validation_alias="LLM_CHAT_COMPLETIONS_URL",

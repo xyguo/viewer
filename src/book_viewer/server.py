@@ -5,8 +5,12 @@ from __future__ import annotations
 import functools
 import hashlib
 import logging
+import posixpath
+import urllib.parse
+from contextlib import suppress
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import cast
 
 from pydantic import BaseModel, ValidationError
@@ -40,6 +44,7 @@ class BookViewerHTTPServer(ThreadingHTTPServer):
         if not static_root.is_dir():
             raise FileNotFoundError(f"Viewer static root does not exist: {static_root}")
         self.settings = settings
+        self.books_root = settings.books_root.resolve()
         if translator is not None:
             self.translator = translator
         elif settings.translation_backend_configured:
@@ -59,6 +64,13 @@ class ReaderHandler(SimpleHTTPRequestHandler):
     @property
     def viewer_server(self) -> BookViewerHTTPServer:
         return cast(BookViewerHTTPServer, self.server)
+
+    def translate_path(self, path: str) -> str:
+        request_path = urllib.parse.urlsplit(path).path
+        if request_path == "/books" or request_path.startswith("/books/"):
+            relative_path = request_path.removeprefix("/books")
+            return str(_resolve_static_path(self.viewer_server.books_root, relative_path))
+        return super().translate_path(path)
 
     def do_POST(self) -> None:
         if self.path != "/api/translate":
@@ -136,6 +148,17 @@ class ReaderHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 
+def _resolve_static_path(root: Path, request_path: str) -> Path:
+    decoded_path = urllib.parse.unquote(request_path, errors="surrogatepass")
+    normalized_path = posixpath.normpath(decoded_path)
+    parts = [part for part in normalized_path.split("/") if part not in {"", "."}]
+    resolved_root = root.resolve()
+    candidate = resolved_root.joinpath(*parts).resolve()
+    if not candidate.is_relative_to(resolved_root):
+        return resolved_root / ".invalid-request-path"
+    return candidate
+
+
 def create_server(
     settings: ServerSettings | None = None,
     *,
@@ -149,7 +172,8 @@ def create_server(
 def run_server(settings: ServerSettings | None = None) -> int:
     """Run the local reader until interrupted."""
 
-    with create_server(settings) as server:
+    server = create_server(settings)
+    try:
         host, port = server.server_address[:2]
         print(f"Parallel book reader available at http://{host}:{port}")
         print("Press Ctrl-C to stop.")
@@ -157,4 +181,7 @@ def run_server(settings: ServerSettings | None = None) -> int:
             server.serve_forever()
         except KeyboardInterrupt:
             print("\nStopping parallel book reader.")
+    finally:
+        with suppress(KeyboardInterrupt):
+            server.server_close()
     return 0
