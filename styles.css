@@ -805,12 +805,6 @@ button {
   color: var(--ink);
 }
 
-.translation-popover[hidden],
-.toast[hidden],
-.toc-scrim[hidden] {
-  display: none;
-}
-
 .popover-topline {
   justify-content: space-between;
   gap: 12px;

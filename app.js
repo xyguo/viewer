@@ -133,7 +133,6 @@
         throw new Error(`Invalid or duplicate segment ID in ${language}: ${id || "(missing)"}`);
       }
       map.set(id, segment);
-      segment.dataset.segmentIndex = String(state.segmentIndexes.get(id));
       segment.dataset.plainText = normalizeText(segment.textContent);
       segment.tabIndex = 0;
       const hasInteractiveChild = Boolean(segment.querySelector("a, button, input, select, textarea, [tabindex]"));
@@ -167,7 +166,6 @@
       button.type = "button";
       button.className = `toc-link level-${entry.level}`;
       button.dataset.seg = entry.segmentId;
-      button.dataset.chapter = entry.chapterId;
       button.textContent = entry.title;
       button.addEventListener("click", () => {
         void navigateToSegment(button.dataset.seg, true);
@@ -492,8 +490,8 @@
     modeNote.textContent = "Scroll either column. Click a sentence to align and highlight its counterpart.";
   }
 
-  function setView(view, forced = false) {
-    if (!forced && state.mode === "online") return;
+  function setView(view) {
+    if (state.mode === "online") return;
     if (!["both", "source", "target"].includes(view)) return;
 
     applyView(view);
