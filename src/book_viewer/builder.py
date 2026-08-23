@@ -88,14 +88,30 @@ def validate_rendered_segments(source_html: str, target_html: str) -> list[str]:
     return source_ids
 
 
-def _validate_local_images(markdown: str, document_dir: Path) -> list[str]:
+def _validate_local_images(
+    markdown: str,
+    document_dir: Path,
+    *,
+    static_root: Path | None,
+    asset_rewrites: dict[str, str],
+) -> list[str]:
     image_paths = IMAGE_RE.findall(markdown)
     for image_path in image_paths:
         if "://" in image_path:
             continue
         resolved = (document_dir / image_path).resolve()
-        if not resolved.is_file():
-            raise FileNotFoundError(f"Referenced figure does not exist: {resolved}")
+        if resolved.is_file():
+            continue
+        if static_root is not None:
+            for source_prefix, target_prefix in asset_rewrites.items():
+                if image_path.startswith(source_prefix):
+                    relative_target = target_prefix + image_path.removeprefix(source_prefix)
+                    if (static_root / relative_target).resolve().is_file():
+                        break
+            else:
+                raise FileNotFoundError(f"Referenced figure does not exist: {resolved}")
+            continue
+        raise FileNotFoundError(f"Referenced figure does not exist: {resolved}")
     return image_paths
 
 
@@ -104,6 +120,9 @@ def validate_markdown_contract(
     target_markdown: str,
     source_dir: Path,
     target_dir: Path,
+    *,
+    static_root: Path | None = None,
+    asset_rewrites: dict[str, str] | None = None,
 ) -> None:
     """Validate structural invariants that must match across both editions."""
 
@@ -116,8 +135,19 @@ def validate_markdown_contract(
     if len(source_tags) != len(set(source_tags)):
         raise ValueError("Duplicate equation tags were found in the paired documents.")
 
-    source_images = _validate_local_images(source_markdown, source_dir)
-    target_images = _validate_local_images(target_markdown, target_dir)
+    rewrites = asset_rewrites or {}
+    source_images = _validate_local_images(
+        source_markdown,
+        source_dir,
+        static_root=static_root,
+        asset_rewrites=rewrites,
+    )
+    target_images = _validate_local_images(
+        target_markdown,
+        target_dir,
+        static_root=static_root,
+        asset_rewrites=rewrites,
+    )
     if source_images != target_images:
         raise ValueError("Figure paths or ordering differ between the source and target documents.")
 
@@ -184,6 +214,8 @@ def build_book(
     source_path = manifest.source_path(resolved_manifest_path)
     target_path = manifest.target_path(resolved_manifest_path)
     output_path = manifest.output_path(resolved_manifest_path)
+    books_dir = resolved_manifest_path.parent.parent
+    static_root = books_dir.parent if books_dir.name == "books" else resolved_manifest_path.parent
 
     source_markdown = source_path.read_text(encoding="utf-8")
     target_markdown = target_path.read_text(encoding="utf-8")
@@ -192,6 +224,8 @@ def build_book(
         target_markdown,
         source_path.parent,
         target_path.parent,
+        static_root=static_root,
+        asset_rewrites=manifest.asset_rewrites,
     )
 
     source_rendered = renderer(source_markdown)
@@ -216,8 +250,10 @@ def build_book(
         description=manifest.description,
         source_language=manifest.source.language,
         source_label=manifest.source.label,
+        source_html_lang=manifest.source.html_lang,
         target_language=manifest.target.language,
         target_label=manifest.target.label,
+        target_html_lang=manifest.target.html_lang,
         source_html=source_html,
         target_html=target_html,
         segment_count=len(segment_ids),

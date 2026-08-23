@@ -25,10 +25,11 @@ class EditionManifest(StrictModel):
 
     language: str = Field(min_length=1, max_length=80)
     label: str = Field(min_length=1, max_length=80)
+    html_lang: str = Field(pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
     markdown: str = Field(min_length=1)
     html_id_prefix: str = Field(pattern=r"^[a-z][a-z0-9-]*$")
 
-    @field_validator("language", "label", "markdown", "html_id_prefix")
+    @field_validator("language", "label", "html_lang", "markdown", "html_id_prefix")
     @classmethod
     def reject_surrounding_whitespace(cls, value: str) -> str:
         if value != value.strip():
@@ -126,8 +127,10 @@ class BookDocumentPayload(StrictModel):
     description: str
     source_language: str
     source_label: str
+    source_html_lang: str
     target_language: str
     target_label: str
+    target_html_lang: str
     source_html: str
     target_html: str
     segment_count: int = Field(ge=1)

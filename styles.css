@@ -315,14 +315,14 @@ button {
   line-height: 1.82;
 }
 
-.document-content.japanese {
+.document-content:lang(ja) {
   font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", Georgia, serif;
   line-height: 2;
 }
 
 /* MathJax emits Unicode prose inside \text{...} as mjx-utext. */
-.document-content.japanese mjx-mtext,
-.document-content.japanese mjx-utext {
+.document-content:lang(ja) mjx-mtext,
+.document-content:lang(ja) mjx-utext {
   font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", Georgia, serif;
 }
 
@@ -456,18 +456,18 @@ button {
   padding: 0.25em 0;
 }
 
-.app-shell[data-view="jp"] .reader,
-.app-shell[data-view="en"] .reader {
+.app-shell[data-view="source"] .reader,
+.app-shell[data-view="target"] .reader {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.app-shell[data-view="jp"] .pane-en,
-.app-shell[data-view="en"] .pane-jp {
+.app-shell[data-view="source"] .pane-target,
+.app-shell[data-view="target"] .pane-source {
   display: none;
 }
 
-.app-shell[data-view="jp"] .document-content,
-.app-shell[data-view="en"] .document-content {
+.app-shell[data-view="source"] .document-content,
+.app-shell[data-view="target"] .document-content {
   max-width: 920px;
   font-size: clamp(1rem, 1.5vw, 1.15rem);
 }
@@ -636,12 +636,12 @@ button {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .app-shell[data-view="both"] .pane-en {
+  .app-shell[data-view="both"] .pane-target {
     display: none;
   }
 
   .app-shell[data-view="both"] .view-controls [data-view-choice="both"]::after {
-    content: " (JP)";
+    content: " (source)";
   }
 
   .pane-scroll {

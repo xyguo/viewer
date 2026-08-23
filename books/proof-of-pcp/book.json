@@ -6,12 +6,14 @@
   "source": {
     "language": "Japanese",
     "label": "日本語",
+    "html_lang": "ja",
     "markdown": "../../../proof-of-pcp-jp.md",
     "html_id_prefix": "source"
   },
   "target": {
     "language": "English",
     "label": "English",
+    "html_lang": "en",
     "markdown": "../../../proof-of-pcp-en.md",
     "html_id_prefix": "target"
   },

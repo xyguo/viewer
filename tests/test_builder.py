@@ -38,12 +38,14 @@ def write_test_book(tmp_path: Path) -> Path:
                 "source": {
                     "language": "Japanese",
                     "label": "日本語",
+                    "html_lang": "ja",
                     "markdown": "source.md",
                     "html_id_prefix": "source",
                 },
                 "target": {
                     "language": "English",
                     "label": "English",
+                    "html_lang": "en",
                     "markdown": "target.md",
                     "html_id_prefix": "target",
                 },

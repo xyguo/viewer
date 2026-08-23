@@ -5,49 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="A sentence-aligned Japanese and English reader for Proof of the PCP Theorem."
+      content="A lightweight sentence-aligned reader for translated books."
     />
-    <title>PCP Proof Reader</title>
+    <title>Parallel Book Reader</title>
     <link rel="stylesheet" href="styles.css" />
-    <script>
-      window.MathJax = {
-        loader: { load: ["[tex]/ams", "[tex]/newcommand", "[tex]/mathtools", "[tex]/physics"] },
-        tex: {
-          packages: { "[+]": ["ams", "newcommand", "mathtools", "physics"] },
-          inlineMath: [["$", "$"], ["\\(", "\\)"]],
-          displayMath: [["$$", "$$"], ["\\[", "\\]"]],
-          tags: "ams",
-          macros: {
-            P: "\\mathsf{P}",
-            NP: "\\mathsf{NP}",
-            PCP: "\\mathsf{PCP}",
-            PSPACE: "\\mathsf{PSPACE}",
-            IP: "\\mathsf{IP}",
-            Ver: "\\operatorname{Ver}",
-            Had: "\\operatorname{Had}",
-            LinEq: "\\operatorname{LinEq}",
-            QuadEQ: "\\operatorname{QuadEq}",
-            ThreeQuadEQ: "\\operatorname{3\\text{-}QuadEq}",
-            UNSAT: "\\operatorname{UNSAT}",
-            val: "\\operatorname{val}",
-            dist: "\\operatorname{dist}",
-            size: "\\operatorname{size}"
-          }
-        },
-        options: {
-          enableMenu: false,
-          skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
-        },
-        startup: {
-          ready() {
-            MathJax.startup.defaultReady();
-            MathJax.startup.promise.then(() => {
-              window.dispatchEvent(new Event("mathjax-ready"));
-            });
-          }
-        }
-      };
-    </script>
   </head>
   <body>
     <a class="skip-link" href="#reader">Skip to reader</a>
@@ -60,7 +21,7 @@
           </button>
           <div>
             <p class="eyebrow">Bilingual lecture notes</p>
-            <h1>PCP Proof Reader</h1>
+            <h1 id="brand-title">Parallel Book Reader</h1>
           </div>
         </div>
         <div class="document-meta" aria-live="polite">
@@ -80,8 +41,8 @@
         <div class="control-group view-controls" aria-label="Visible languages">
           <span class="control-label">View</span>
           <button class="segmented-button is-selected" type="button" data-view-choice="both" aria-pressed="true">Side by side</button>
-          <button class="segmented-button" type="button" data-view-choice="jp" aria-pressed="false">Japanese</button>
-          <button class="segmented-button" type="button" data-view-choice="en" aria-pressed="false">English</button>
+          <button class="segmented-button" type="button" data-view-choice="source" aria-pressed="false">Source</button>
+          <button class="segmented-button" type="button" data-view-choice="target" aria-pressed="false">Translation</button>
         </div>
 
         <p class="mode-note" id="mode-note">Scroll either column. Click a sentence to align and highlight its counterpart.</p>
@@ -100,36 +61,36 @@
         </aside>
 
         <main class="reader" id="reader">
-          <section class="language-pane pane-jp" data-language="jp" aria-labelledby="jp-heading">
+          <section class="language-pane pane-source" data-language="source" aria-labelledby="source-heading">
             <header class="pane-header">
               <div>
                 <p class="language-kicker">Original</p>
-                <h2 id="jp-heading">日本語</h2>
+                <h2 id="source-heading">Source</h2>
               </div>
-              <span class="reading-progress" id="jp-progress">0%</span>
+              <span class="reading-progress" id="source-progress">0%</span>
             </header>
-            <div class="pane-scroll" id="jp-scroll" tabindex="0">
-              <article class="document-content japanese" id="jp-content"></article>
+            <div class="pane-scroll" id="source-scroll" tabindex="0">
+              <article class="document-content source" id="source-content"></article>
             </div>
           </section>
 
-          <section class="language-pane pane-en" data-language="en" aria-labelledby="en-heading">
+          <section class="language-pane pane-target" data-language="target" aria-labelledby="target-heading">
             <header class="pane-header">
               <div>
                 <p class="language-kicker">Translation</p>
-                <h2 id="en-heading">English</h2>
+                <h2 id="target-heading">Translation</h2>
               </div>
-              <span class="reading-progress" id="en-progress">0%</span>
+              <span class="reading-progress" id="target-progress">0%</span>
             </header>
-            <div class="pane-scroll" id="en-scroll" tabindex="0">
-              <article class="document-content english" id="en-content"></article>
+            <div class="pane-scroll" id="target-scroll" tabindex="0">
+              <article class="document-content target" id="target-content"></article>
             </div>
           </section>
 
           <section class="empty-state" id="empty-state" hidden>
             <p class="eyebrow">Document unavailable</p>
             <h2>The generated reader data is missing.</h2>
-            <p>Run <code>python3 build_data.py</code> in this folder after both Markdown files are present.</p>
+            <p id="empty-state-message">Build a book manifest before opening the reader.</p>
           </section>
         </main>
       </div>
@@ -146,8 +107,8 @@
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <div class="toc-scrim" id="toc-scrim" hidden></div>
 
-    <script src="document-data.js" defer></script>
+    <script src="books/catalog.js" defer></script>
     <script src="app.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js" defer></script>
+    <script src="bootstrap.js" defer></script>
   </body>
 </html>

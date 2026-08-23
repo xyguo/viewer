@@ -1,13 +1,19 @@
 (() => {
   "use strict";
 
-  const data = window.PCP_DOCUMENT || {};
+  let data = null;
   const shell = document.querySelector(".app-shell");
-  const jpContent = document.querySelector("#jp-content");
-  const enContent = document.querySelector("#en-content");
-  const jpScroll = document.querySelector("#jp-scroll");
-  const enScroll = document.querySelector("#en-scroll");
+  const sourceContent = document.querySelector("#source-content");
+  const targetContent = document.querySelector("#target-content");
+  const sourceScroll = document.querySelector("#source-scroll");
+  const targetScroll = document.querySelector("#target-scroll");
   const emptyState = document.querySelector("#empty-state");
+  const emptyStateMessage = document.querySelector("#empty-state-message");
+  const brandTitle = document.querySelector("#brand-title");
+  const sourceHeading = document.querySelector("#source-heading");
+  const targetHeading = document.querySelector("#target-heading");
+  const sourceViewButton = document.querySelector('[data-view-choice="source"]');
+  const targetViewButton = document.querySelector('[data-view-choice="target"]');
   const countLabel = document.querySelector("#segment-count");
   const statusLabel = document.querySelector("#reader-status");
   const modeNote = document.querySelector("#mode-note");
@@ -22,8 +28,8 @@
   const popoverClose = document.querySelector("#popover-close");
   const toast = document.querySelector("#toast");
   const progressLabels = {
-    jp: document.querySelector("#jp-progress"),
-    en: document.querySelector("#en-progress")
+    source: document.querySelector("#source-progress"),
+    target: document.querySelector("#target-progress")
   };
 
   const state = {
@@ -39,33 +45,39 @@
     tocOpen: false,
     liveRequestId: 0,
     liveController: null,
-    segmentLists: { jp: [], en: [] },
-    segmentMaps: { jp: new Map(), en: new Map() }
+    segmentLists: { source: [], target: [] },
+    segmentMaps: { source: new Map(), target: new Map() }
   };
 
-  function initialize() {
+  function initialize(documentData) {
+    data = documentData;
     if (!data.sourceHtml || !data.targetHtml) {
-      document.querySelectorAll(".language-pane").forEach((pane) => {
-        pane.hidden = true;
-      });
-      emptyState.hidden = false;
-      countLabel.textContent = "No reader data";
+      showLoadError("The selected book data is incomplete.");
       return;
     }
 
-    jpContent.innerHTML = data.sourceHtml;
-    enContent.innerHTML = data.targetHtml;
-    prepareSegments("jp", jpContent);
-    prepareSegments("en", enContent);
+    document.title = data.readerTitle;
+    document.querySelector('meta[name="description"]').content = data.description;
+    brandTitle.textContent = data.readerTitle;
+    sourceHeading.textContent = data.sourceLabel;
+    targetHeading.textContent = data.targetLabel;
+    sourceViewButton.textContent = data.sourceLabel;
+    targetViewButton.textContent = data.targetLabel;
+    sourceContent.lang = data.sourceHtmlLang;
+    targetContent.lang = data.targetHtmlLang;
+    sourceContent.innerHTML = data.sourceHtml;
+    targetContent.innerHTML = data.targetHtml;
+    prepareSegments("source", sourceContent);
+    prepareSegments("target", targetContent);
     validateAlignment();
     buildToc();
     installEvents();
     updateTocAccessibility();
     updateControls();
-    updateProgress("jp");
-    updateProgress("en");
+    updateProgress("source");
+    updateProgress("target");
 
-    const count = state.segmentLists.jp.length;
+    const count = state.segmentLists.source.length;
     countLabel.textContent = `${count.toLocaleString()} aligned segments`;
     statusLabel.textContent = "Offline edition";
 
@@ -92,7 +104,8 @@
       segment.tabIndex = 0;
       const hasInteractiveChild = Boolean(segment.querySelector("a, button, input, select, textarea, [tabindex]"));
       segment.setAttribute("role", hasInteractiveChild ? "group" : "button");
-      segment.setAttribute("aria-label", language === "jp" ? "Show English counterpart" : "Show Japanese counterpart");
+      const counterpartLabel = language === "source" ? data.targetLabel : data.sourceLabel;
+      segment.setAttribute("aria-label", `Show ${counterpartLabel} counterpart`);
     });
 
     state.segmentLists[language] = segments;
@@ -100,16 +113,16 @@
   }
 
   function validateAlignment() {
-    const jpIds = state.segmentLists.jp.map((segment) => segment.dataset.seg);
-    const enIds = state.segmentLists.en.map((segment) => segment.dataset.seg);
-    const mismatch = jpIds.length !== enIds.length || jpIds.some((id, index) => id !== enIds[index]);
+    const sourceIds = state.segmentLists.source.map((segment) => segment.dataset.seg);
+    const targetIds = state.segmentLists.target.map((segment) => segment.dataset.seg);
+    const mismatch = sourceIds.length !== targetIds.length || sourceIds.some((id, index) => id !== targetIds[index]);
     if (mismatch) {
       showToast("The bilingual files have mismatched sentence IDs. Some alignment features may be unavailable.", 7000);
     }
   }
 
   function buildToc() {
-    const headings = [...jpContent.querySelectorAll("h1, h2, h3")];
+    const headings = [...sourceContent.querySelectorAll("h1, h2, h3")];
     const fragment = document.createDocumentFragment();
 
     headings.forEach((heading) => {
@@ -139,19 +152,19 @@
       button.addEventListener("click", () => setView(button.dataset.viewChoice));
     });
 
-    [jpContent, enContent].forEach((container) => {
+    [sourceContent, targetContent].forEach((container) => {
       container.addEventListener("click", onSegmentActivation);
       container.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         const segment = event.target.closest(".segment[data-seg]");
         if (!segment || event.target !== segment) return;
         event.preventDefault();
-        activateSegment(segment, container === jpContent ? "jp" : "en");
+        activateSegment(segment, container === sourceContent ? "source" : "target");
       });
     });
 
-    jpScroll.addEventListener("scroll", () => onPaneScroll("jp"), { passive: true });
-    enScroll.addEventListener("scroll", () => onPaneScroll("en"), { passive: true });
+    sourceScroll.addEventListener("scroll", () => onPaneScroll("source"), { passive: true });
+    targetScroll.addEventListener("scroll", () => onPaneScroll("target"), { passive: true });
 
     popoverClose.addEventListener("click", () => hidePopover(true));
     tocToggle.addEventListener("click", openToc);
@@ -178,7 +191,7 @@
     const segment = event.target.closest(".segment[data-seg]");
     if (!segment) return;
     if (event.target !== segment && event.target.closest("a, button, input, select, textarea")) return;
-    const language = event.currentTarget === jpContent ? "jp" : "en";
+    const language = event.currentTarget === sourceContent ? "source" : "target";
     activateSegment(segment, language);
   }
 
@@ -187,7 +200,7 @@
     setActiveSegment(id);
 
     if (state.mode === "online") {
-      if (language !== "jp") return;
+      if (language !== "source") return;
       requestLiveTranslation(segment);
       return;
     }
@@ -196,13 +209,13 @@
       alignCounterpart(language, id, segment, true);
       hidePopover(false);
     } else {
-      const otherLanguage = language === "jp" ? "en" : "jp";
+      const otherLanguage = language === "source" ? "target" : "source";
       const counterpart = state.segmentMaps[otherLanguage].get(id);
       if (!counterpart) {
         showToast("No mapped counterpart was found for this segment.");
         return;
       }
-      const label = otherLanguage === "en" ? "English translation" : "Japanese source";
+      const label = otherLanguage === "target" ? `${data.targetLabel} translation` : `${data.sourceLabel} source`;
       showPopover(segment, label, counterpart.innerHTML, true);
     }
   }
@@ -231,9 +244,9 @@
 
     if (mode === "online") {
       state.offlineView = state.view;
-      setView("jp", true);
+      setView("source", true);
       statusLabel.textContent = "Live translation";
-      modeNote.textContent = "Click a Japanese sentence to translate it with nearby context. Live mode requires the reader server and llama.cpp SSH tunnel.";
+      modeNote.textContent = `Click a ${data.sourceLanguage} sentence to translate it with nearby context. Live mode requires the reader server and llama.cpp SSH tunnel.`;
     } else {
       setView(state.offlineView || "both", true);
       statusLabel.textContent = "Offline edition";
@@ -245,7 +258,7 @@
 
   function setView(view, forced = false) {
     if (!forced && state.mode === "online") return;
-    if (!["both", "jp", "en"].includes(view)) return;
+    if (!["both", "source", "target"].includes(view)) return;
 
     state.view = view;
     if (state.mode === "offline") state.offlineView = view;
@@ -254,8 +267,8 @@
     updateControls();
 
     requestAnimationFrame(() => {
-      updateProgress("jp");
-      updateProgress("en");
+      updateProgress("source");
+      updateProgress("target");
       if (state.activeId) navigateToSegment(state.activeId, false);
     });
   }
@@ -286,21 +299,21 @@
   }
 
   function syncFrom(language) {
-    const sourceScroll = language === "jp" ? jpScroll : enScroll;
-    const targetLanguage = language === "jp" ? "en" : "jp";
-    const targetScroll = targetLanguage === "jp" ? jpScroll : enScroll;
-    const sourceSegments = state.segmentLists[language];
-    const sourceTop = sourceScroll.getBoundingClientRect().top + 8;
-    const anchor = sourceSegments.find((element) => element.getBoundingClientRect().bottom > sourceTop);
+    const originScroller = language === "source" ? sourceScroll : targetScroll;
+    const counterpartLanguage = language === "source" ? "target" : "source";
+    const destinationScroller = counterpartLanguage === "source" ? sourceScroll : targetScroll;
+    const originSegments = state.segmentLists[language];
+    const originTop = originScroller.getBoundingClientRect().top + 8;
+    const anchor = originSegments.find((element) => element.getBoundingClientRect().bottom > originTop);
 
     if (!anchor) return;
-    const target = state.segmentMaps[targetLanguage].get(anchor.dataset.seg);
+    const target = state.segmentMaps[counterpartLanguage].get(anchor.dataset.seg);
     if (!target) return;
 
-    const relativeTop = anchor.getBoundingClientRect().top - sourceTop;
-    const targetTop = targetScroll.getBoundingClientRect().top + 8;
+    const relativeTop = anchor.getBoundingClientRect().top - originTop;
+    const targetTop = destinationScroller.getBoundingClientRect().top + 8;
     state.syncLock = true;
-    targetScroll.scrollTop += target.getBoundingClientRect().top - targetTop - relativeTop;
+    destinationScroller.scrollTop += target.getBoundingClientRect().top - targetTop - relativeTop;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         state.syncLock = false;
@@ -309,17 +322,17 @@
   }
 
   function alignCounterpart(language, id, sourceElement, smooth) {
-    const targetLanguage = language === "jp" ? "en" : "jp";
-    const sourceScroll = language === "jp" ? jpScroll : enScroll;
-    const targetScroll = targetLanguage === "jp" ? jpScroll : enScroll;
+    const targetLanguage = language === "source" ? "target" : "source";
+    const originScroller = language === "source" ? sourceScroll : targetScroll;
+    const destinationScroller = targetLanguage === "source" ? sourceScroll : targetScroll;
     const target = state.segmentMaps[targetLanguage].get(id);
     if (!target) return;
 
-    const sourceOffset = sourceElement.getBoundingClientRect().top - sourceScroll.getBoundingClientRect().top;
-    const targetOffset = target.getBoundingClientRect().top - targetScroll.getBoundingClientRect().top;
+    const sourceOffset = sourceElement.getBoundingClientRect().top - originScroller.getBoundingClientRect().top;
+    const targetOffset = target.getBoundingClientRect().top - destinationScroller.getBoundingClientRect().top;
     state.syncLock = true;
-    targetScroll.scrollTo({
-      top: targetScroll.scrollTop + targetOffset - sourceOffset,
+    destinationScroller.scrollTo({
+      top: destinationScroller.scrollTop + targetOffset - sourceOffset,
       behavior: smooth ? "smooth" : "auto"
     });
     window.setTimeout(() => {
@@ -328,18 +341,18 @@
   }
 
   function navigateToSegment(id, smooth) {
-    const jpSegment = state.segmentMaps.jp.get(id);
-    const enSegment = state.segmentMaps.en.get(id);
-    if (!jpSegment && !enSegment) return;
+    const sourceSegment = state.segmentMaps.source.get(id);
+    const targetSegment = state.segmentMaps.target.get(id);
+    if (!sourceSegment && !targetSegment) return;
 
     setActiveSegment(id);
     state.syncLock = true;
 
-    if (state.view !== "en" && jpSegment) {
-      scrollElementIntoPane(jpScroll, jpSegment, smooth);
+    if (state.view !== "target" && sourceSegment) {
+      scrollElementIntoPane(sourceScroll, sourceSegment, smooth);
     }
-    if (state.mode === "offline" && state.view !== "jp" && enSegment) {
-      scrollElementIntoPane(enScroll, enSegment, smooth);
+    if (state.mode === "offline" && state.view !== "source" && targetSegment) {
+      scrollElementIntoPane(targetScroll, targetSegment, smooth);
     }
 
     window.setTimeout(() => {
@@ -356,17 +369,17 @@
   }
 
   function updateProgress(language) {
-    const scroller = language === "jp" ? jpScroll : enScroll;
+    const scroller = language === "source" ? sourceScroll : targetScroll;
     const denominator = Math.max(1, scroller.scrollHeight - scroller.clientHeight);
     const percent = Math.round((scroller.scrollTop / denominator) * 100);
     progressLabels[language].textContent = `${Math.max(0, Math.min(100, percent))}%`;
   }
 
   function updateCurrentToc(language) {
-    if (language !== "jp") return;
-    const top = jpScroll.getBoundingClientRect().top + 12;
+    if (language !== "source") return;
+    const top = sourceScroll.getBoundingClientRect().top + 12;
     let currentId = null;
-    [...jpContent.querySelectorAll("h1, h2, h3")].forEach((heading) => {
+    [...sourceContent.querySelectorAll("h1, h2, h3")].forEach((heading) => {
       if (heading.getBoundingClientRect().top <= top) {
         currentId = heading.querySelector(".segment[data-seg]")?.dataset.seg || currentId;
       }
@@ -384,18 +397,18 @@
       showPopover(
         segment,
         "Live translation unavailable",
-        "<p>Start <code>server.py</code> and open the local HTTP address shown in the terminal to use live translation.</p>",
+        "<p>Run <code>uv run book-viewer-serve</code> and open the local HTTP address shown in the terminal to use live translation.</p>",
         false
       );
       return;
     }
 
-    const list = state.segmentLists.jp;
+    const list = state.segmentLists.source;
     const index = list.indexOf(segment);
     const sentence = segment.dataset.plainText || normalizeText(segment.textContent);
     const before = list.slice(Math.max(0, index - 2), index).map(segmentText);
     const after = list.slice(index + 1, index + 3).map(segmentText);
-    const cacheKey = `pcp-live:${segment.dataset.seg}:${simpleHash(JSON.stringify([sentence, before, after]))}`;
+    const cacheKey = `book-viewer-live:${data.slug}:${segment.dataset.seg}:${simpleHash(JSON.stringify([sentence, before, after]))}`;
     const cached = storageGet(cacheKey);
 
     if (cached) {
@@ -416,8 +429,8 @@
           sentence,
           before,
           after,
-          source_language: "Japanese",
-          target_language: "English"
+          source_language: data.sourceLanguage,
+          target_language: data.targetLanguage
         })
       });
       const payload = await response.json().catch(() => ({}));
@@ -446,7 +459,7 @@
   function showLiveTranslation(segment, translation) {
     const paragraph = document.createElement("p");
     paragraph.textContent = translation;
-    showPopover(segment, "Live English translation", paragraph.outerHTML, false);
+    showPopover(segment, `Live ${data.targetLabel} translation`, paragraph.outerHTML, false);
   }
 
   function showPopover(anchor, label, html, alreadyTypeset) {
@@ -525,8 +538,8 @@
   }
 
   function typesetDocument() {
-    typesetElement(jpContent);
-    typesetElement(enContent);
+    typesetElement(sourceContent);
+    typesetElement(targetContent);
   }
 
   function typesetElement(element) {
@@ -580,5 +593,14 @@
     return element.innerHTML;
   }
 
-  initialize();
+  function showLoadError(message) {
+    document.querySelectorAll(".language-pane").forEach((pane) => {
+      pane.hidden = true;
+    });
+    emptyStateMessage.textContent = message;
+    emptyState.hidden = false;
+    countLabel.textContent = "No reader data";
+  }
+
+  window.BookViewer = Object.freeze({ initialize, showLoadError });
 })();
