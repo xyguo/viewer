@@ -8,15 +8,13 @@ from pathlib import Path
 
 from .builder import build_book
 
-DEFAULT_MANIFEST = Path("books/proof-of-pcp/book.json")
-
 
 def create_build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build static data for a translated book.")
     parser.add_argument(
         "--manifest",
         type=Path,
-        default=DEFAULT_MANIFEST,
+        required=True,
         help="Path to a strict per-book JSON manifest",
     )
     return parser

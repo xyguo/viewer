@@ -30,6 +30,12 @@ def test_run_build_uses_selected_manifest(
     assert "7 aligned segments" in capsys.readouterr().out
 
 
+def test_build_command_requires_manifest() -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        cli.run_build([])
+    assert exit_info.value.code == 2
+
+
 def test_serve_main_exits_with_server_status(monkeypatch: MonkeyPatch) -> None:
     from book_viewer import server
 
