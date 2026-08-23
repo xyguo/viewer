@@ -1,0 +1,155 @@
+"""Translation backend abstraction and llama.cpp Chat Completions client."""
+
+from __future__ import annotations
+
+import json
+import threading
+import urllib.error
+import urllib.request
+from http import HTTPStatus
+from types import TracebackType
+from typing import Protocol, Self, cast
+
+from pydantic import ValidationError
+
+from .models import (
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatMessage,
+    TranslationRequest,
+    UpstreamErrorResponse,
+)
+from .settings import ServerSettings
+
+
+class TranslationError(Exception):
+    """A safe error that can be returned to a viewer client."""
+
+    def __init__(self, message: str, status: HTTPStatus = HTTPStatus.BAD_GATEWAY) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class Translator(Protocol):
+    def translate(self, request: TranslationRequest) -> str:
+        """Translate exactly the selected sentence."""
+
+        ...
+
+
+class ReadableResponse(Protocol):
+    def __enter__(self) -> Self: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None: ...
+
+    def read(self) -> bytes: ...
+
+
+class UrlOpen(Protocol):
+    def __call__(self, request: urllib.request.Request, *, timeout: float) -> ReadableResponse: ...
+
+
+class TranslationCache:
+    """Small thread-safe FIFO cache for repeated sentence clicks."""
+
+    def __init__(self, max_items: int) -> None:
+        if max_items < 1:
+            raise ValueError("max_items must be positive")
+        self._max_items = max_items
+        self._values: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def get(self, key: str) -> str | None:
+        with self._lock:
+            return self._values.get(key)
+
+    def put(self, key: str, value: str) -> None:
+        with self._lock:
+            if key not in self._values and len(self._values) >= self._max_items:
+                self._values.pop(next(iter(self._values)))
+            self._values[key] = value
+
+
+class LlamaCppTranslator:
+    """OpenAI-compatible client for a local llama.cpp translation endpoint."""
+
+    def __init__(
+        self,
+        settings: ServerSettings,
+        *,
+        urlopen: UrlOpen | None = None,
+    ) -> None:
+        self._settings = settings
+        self._urlopen = urlopen or cast(UrlOpen, urllib.request.urlopen)
+
+    def translate(self, request: TranslationRequest) -> str:
+        chat_request = self._create_chat_request(request)
+        upstream_request = urllib.request.Request(
+            self._settings.chat_completions_endpoint,
+            data=chat_request.model_dump_json().encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            response_context = self._urlopen(
+                upstream_request,
+                timeout=self._settings.request_timeout_seconds,
+            )
+            with response_context as response:
+                raw_response = response.read()
+            parsed = ChatCompletionResponse.model_validate_json(raw_response)
+        except urllib.error.HTTPError as error:
+            raise self._http_error(error) from error
+        except (urllib.error.URLError, TimeoutError) as error:
+            raise TranslationError(
+                "The viewer server could not reach llama.cpp at the configured local endpoint. "
+                "Check the SSH tunnel."
+            ) from error
+        except (ValidationError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise TranslationError(
+                "The llama.cpp server returned an invalid Chat Completions response."
+            ) from error
+
+        translation = parsed.choices[0].message.content.strip()
+        if not translation:
+            raise TranslationError("The llama.cpp server returned no translation text.")
+        return translation
+
+    def _create_chat_request(self, request: TranslationRequest) -> ChatCompletionRequest:
+        context = json.dumps(
+            {
+                "preceding_sentences": request.before,
+                "following_sentences": request.after,
+            },
+            ensure_ascii=False,
+        )
+        instructions = (
+            f"Translate exactly one sentence from {request.source_language} to "
+            f"{request.target_language}. The user message is the only sentence to translate. "
+            "Use the surrounding context below only to resolve terminology and references; do "
+            "not translate or repeat that context. Return only the faithful translation of the "
+            "user message. Preserve all mathematical notation, symbols, citation keys, and "
+            "equation references. Do not add explanation, quotation marks, Markdown fences, or "
+            f"commentary. Surrounding context: {context}"
+        )
+        return ChatCompletionRequest(
+            model=self._settings.translation_model,
+            messages=[
+                ChatMessage(role="system", content=instructions),
+                ChatMessage(role="user", content=request.sentence),
+            ],
+        )
+
+    def _http_error(self, error: urllib.error.HTTPError) -> TranslationError:
+        fallback = "The llama.cpp server rejected the translation request."
+        try:
+            parsed = UpstreamErrorResponse.model_validate_json(error.read())
+            message = parsed.error.message
+        except (ValidationError, UnicodeDecodeError, json.JSONDecodeError):
+            message = fallback
+        return TranslationError(message)

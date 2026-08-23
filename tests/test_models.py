@@ -7,7 +7,12 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from book_viewer.models import BookDocumentPayload, BookManifest, MathJaxManifest
+from book_viewer.models import (
+    BookDocumentPayload,
+    BookManifest,
+    MathJaxManifest,
+    TranslationRequest,
+)
 
 
 def valid_manifest_data() -> dict[str, object]:
@@ -81,3 +86,30 @@ def test_document_payload_uses_camel_case_and_strict_counts() -> None:
     invalid = {**dumped, "segmentCount": "1"}
     with pytest.raises(ValidationError, match="valid integer"):
         BookDocumentPayload.model_validate(invalid)
+
+
+def test_translation_request_normalizes_text_and_rejects_loose_input() -> None:
+    request = TranslationRequest(
+        sentence="  A   sentence. ",
+        before=[" Previous.  "],
+        after=[],
+        source_language=" Japanese ",
+        target_language="English",
+    )
+    assert request.sentence == "A sentence."
+    assert request.before == ["Previous."]
+    assert request.source_language == "Japanese"
+
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        TranslationRequest.model_validate(
+            {
+                **request.model_dump(),
+                "unexpected": True,
+            }
+        )
+    with pytest.raises(ValidationError, match="valid list"):
+        TranslationRequest.model_validate({**request.model_dump(), "before": "Previous."})
+    with pytest.raises(ValidationError, match="at most 4 items"):
+        TranslationRequest.model_validate({**request.model_dump(), "after": ["x"] * 5})
+    with pytest.raises(ValidationError, match="must not be empty"):
+        TranslationRequest.model_validate({**request.model_dump(), "sentence": "   "})

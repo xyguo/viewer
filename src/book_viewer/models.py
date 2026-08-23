@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path, PurePosixPath
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -143,3 +144,83 @@ class BuildResult(StrictModel):
 
     output_path: Path
     segment_count: int = Field(ge=1)
+
+
+MAX_SENTENCE_CHARS = 4_000
+MAX_CONTEXT_ITEMS = 4
+MAX_LANGUAGE_CHARS = 80
+
+
+def _normalized_text(value: str) -> str:
+    return " ".join(value.split()).strip()
+
+
+class TranslationRequest(StrictModel):
+    """Validated browser request for translating one selected sentence."""
+
+    sentence: str = Field(min_length=1, max_length=MAX_SENTENCE_CHARS)
+    before: list[str] = Field(default_factory=list, max_length=MAX_CONTEXT_ITEMS)
+    after: list[str] = Field(default_factory=list, max_length=MAX_CONTEXT_ITEMS)
+    source_language: str = Field(min_length=1, max_length=MAX_LANGUAGE_CHARS)
+    target_language: str = Field(min_length=1, max_length=MAX_LANGUAGE_CHARS)
+
+    @field_validator("sentence", "source_language", "target_language")
+    @classmethod
+    def normalize_text(cls, value: str) -> str:
+        normalized = _normalized_text(value)
+        if not normalized:
+            raise ValueError("must not be empty or whitespace")
+        return normalized
+
+    @field_validator("before", "after")
+    @classmethod
+    def normalize_context(cls, values: list[str]) -> list[str]:
+        normalized = [_normalized_text(value) for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("context items must not be empty or whitespace")
+        if any(len(value) > MAX_SENTENCE_CHARS for value in normalized):
+            raise ValueError(f"context items must contain at most {MAX_SENTENCE_CHARS} characters")
+        return normalized
+
+
+class TranslationResponse(StrictModel):
+    translation: str = Field(min_length=1)
+
+
+class ErrorResponse(StrictModel):
+    error: str = Field(min_length=1)
+
+
+class ChatMessage(StrictModel):
+    role: Literal["system", "user", "assistant"]
+    content: str = Field(min_length=1)
+
+
+class ChatCompletionRequest(StrictModel):
+    model: str = Field(min_length=1)
+    messages: list[ChatMessage] = Field(min_length=2)
+    temperature: int = Field(default=0, ge=0)
+    max_tokens: int = Field(default=900, ge=1)
+    stream: Literal[False] = False
+
+
+class UpstreamModel(BaseModel):
+    """Strict known fields while allowing llama.cpp response metadata."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+
+class ChatCompletionChoice(UpstreamModel):
+    message: ChatMessage
+
+
+class ChatCompletionResponse(UpstreamModel):
+    choices: list[ChatCompletionChoice] = Field(min_length=1)
+
+
+class UpstreamErrorDetail(UpstreamModel):
+    message: str = Field(min_length=1)
+
+
+class UpstreamErrorResponse(UpstreamModel):
+    error: UpstreamErrorDetail

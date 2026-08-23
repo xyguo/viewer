@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from pytest import CaptureFixture, MonkeyPatch
 
 from book_viewer import cli
@@ -27,3 +28,15 @@ def test_run_build_uses_selected_manifest(
     assert cli.run_build(["--manifest", str(manifest_path)]) == 0
     assert captured == [manifest_path]
     assert "7 aligned segments" in capsys.readouterr().out
+
+
+def test_serve_main_exits_with_server_status(monkeypatch: MonkeyPatch) -> None:
+    from book_viewer import server
+
+    def fake_run_server() -> int:
+        return 3
+
+    monkeypatch.setattr(server, "run_server", fake_run_server)
+    with pytest.raises(SystemExit) as exit_info:
+        cli.serve_main()
+    assert exit_info.value.code == 3

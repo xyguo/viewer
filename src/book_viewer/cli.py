@@ -32,3 +32,9 @@ def run_build(argv: Sequence[str] | None = None) -> int:
 
 def build_main() -> None:
     raise SystemExit(run_build())
+
+
+def serve_main() -> None:
+    from .server import run_server
+
+    raise SystemExit(run_server())
