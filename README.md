@@ -1,20 +1,20 @@
 # Parallel Book Viewer
 
-Parallel Book Viewer is a lightweight, sentence-aligned reader for translated books. The browser application and Python tooling are book-independent. Each book supplies only a strict manifest, generated document data, and its assets under `books/`.
-
-The bundled book is the Japanese and English edition of *Proof of the PCP Theorem*.
+Parallel Book Viewer is a lightweight, sentence-aligned reader for translated books. The browser application and Python tooling are book-independent. Book content is a local external library under `books/` and is intentionally excluded from Git.
 
 ## Project layout
 
 ```text
 viewer/
 ├── app.js, bootstrap.js, index.html, styles.css  # generic static reader
-├── books/
-│   ├── catalog.js                               # available books
-│   └── proof-of-pcp/                            # one isolated book package
-│       ├── book.json                            # source and presentation manifest
+├── books/                                       # ignored external book library
+│   ├── catalog.js                               # generated local catalog
+│   └── <slug>/
+│       ├── book.json                            # local versioned manifest
+│       ├── source.md, target.md                 # local paired editions
 │       ├── document-data.js                     # generated browser payload
-│       └── assets/                              # book-specific figures
+│       └── assets/                              # local book-specific files
+├── schemas/book.schema.json                     # tracked metadata contract
 ├── src/book_viewer/                             # typed builder and local server
 ├── tests/                                       # Python unit and HTTP tests
 ├── pyproject.toml                               # dependencies and quality policy
@@ -34,11 +34,13 @@ uv creates and manages the project-specific `.venv` automatically. Python depend
 
 Pandoc is also required when rebuilding a book. It is a build-time executable, not a Python or browser dependency.
 
+The repository does not contain books after a fresh clone. Restore or synchronize your external `books/` library separately. Because Git ignores that directory, its Markdown and assets need their own backup strategy.
+
 ## Read a book
 
-For offline mode, open `index.html` directly. The complete source and target editions are embedded in the selected book's `document-data.js`. MathJax is loaded from a CDN, so typeset mathematics requires network access unless the script is vendored locally.
+Build at least one local external book, then open `index.html` directly. The complete source and target editions are embedded in the selected book's generated `document-data.js`. MathJax is loaded from a CDN, so typeset mathematics requires network access unless the script is vendored locally.
 
-The default book comes from `books/catalog.js`. Select another catalog entry with a query parameter:
+`book-viewer-build` regenerates `books/catalog.js` from all valid local manifests that have browser data. Select another catalog entry with a query parameter:
 
 ```text
 index.html?book=another-book
@@ -103,10 +105,14 @@ For example, a service expecting `api-key: <key>` can use `LLM_API_KEY_HEADER=ap
 
 ## Add another book
 
-Create `books/<slug>/book.json`. All book-specific values, including titles, language labels, Markdown paths, asset mapping, and MathJax macros, belong in this file.
+Create `books/<slug>/` and keep its source Markdown, target Markdown, assets, manifest, and generated browser data together. All of it remains local and ignored by Git.
+
+The manifest must declare the current schema version. The optional `$schema` field gives compatible editors the tracked JSON Schema:
 
 ```json
 {
+  "$schema": "../../schemas/book.schema.json",
+  "schema_version": 1,
   "slug": "another-book",
   "title": "Another Book",
   "reader_title": "Another Book Reader",
@@ -115,19 +121,19 @@ Create `books/<slug>/book.json`. All book-specific values, including titles, lan
     "language": "Japanese",
     "label": "日本語",
     "html_lang": "ja",
-    "markdown": "../../../another-book-jp.md",
+    "markdown": "source.md",
     "html_id_prefix": "source"
   },
   "target": {
     "language": "English",
     "label": "English",
     "html_lang": "en",
-    "markdown": "../../../another-book-en.md",
+    "markdown": "target.md",
     "html_id_prefix": "target"
   },
   "data_file": "document-data.js",
   "asset_rewrites": {
-    "viewer/assets/": "books/another-book/assets/"
+    "assets/": "books/another-book/assets/"
   },
   "mathjax": {
     "packages": ["ams"],
@@ -144,15 +150,35 @@ Both Markdown editions must use matching wrappers such as:
 
 The boundary rule is intentionally mechanical: headings and captions are one segment, prose is split at ordinary sentence-final punctuation, and a display formula remains one block between neighboring prose segments. Only the ordered `data-seg` values define the mapping. The builder rejects missing, duplicate, or differently ordered IDs, mismatched equation tags, mismatched figures, and missing local assets.
 
-Put book-specific figures under `books/<slug>/assets/`. `asset_rewrites` maps paths found in the Markdown to paths relative to the generic `index.html`.
+Put book-specific figures under `books/<slug>/assets/` and reference them as `assets/...` from both Markdown files. `asset_rewrites` maps those local Markdown paths to paths relative to the generic `index.html`.
 
-Add the new slug and generated data path to `books/catalog.js`, then build it:
+Build the book and regenerate the local catalog:
 
 ```sh
-UV_CACHE_DIR=.uv-cache uv run book-viewer-build --manifest books/another-book/book.json
+UV_CACHE_DIR=.uv-cache uv run book-viewer-build \
+  --manifest books/another-book/book.json \
+  --default-book another-book
 ```
 
 Equation numbers written with LaTeX `\tag{...}` are preserved and checked across both editions.
+
+## Metadata compatibility
+
+`schema_version` is required and the browser payload carries the same version. The viewer rejects stale catalogs or generated document data instead of attempting to interpret an incompatible format.
+
+The canonical contract is [schemas/book.schema.json](schemas/book.schema.json). It is generated from the strict Pydantic `BookManifest` model, and the test suite fails if the tracked schema drifts from the application model.
+
+Validate every locally present external manifest without rebuilding the books:
+
+```sh
+UV_CACHE_DIR=.uv-cache uv run book-viewer-validate --books-dir books
+```
+
+When deliberately changing the metadata model, regenerate the tracked schema with:
+
+```sh
+UV_CACHE_DIR=.uv-cache uv run book-viewer-schema --output schemas/book.schema.json
+```
 
 ## Quality gates
 
@@ -167,7 +193,8 @@ The gate performs:
 - Ruff formatting verification and linting;
 - Pyright in strict mode;
 - Pytest with branch coverage; and
-- an 80% minimum total coverage threshold enforced by `pyproject.toml`.
+- an 80% minimum total coverage threshold enforced by `pyproject.toml`; and
+- compatibility validation for every external book currently present under `books/`.
 
 Individual commands are also available:
 
