@@ -7,18 +7,58 @@
       name="description"
       content="A lightweight sentence-aligned reader for translated books."
     />
-    <title>Parallel Book Reader</title>
+    <title>Parallel Book Viewer</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <a class="skip-link" href="#reader">Skip to reader</a>
+    <a class="skip-link" id="skip-link" href="#catalog-main">Skip to book catalog</a>
 
-    <div class="app-shell" data-view="both" data-mode="offline">
+    <section class="catalog-page" id="catalog-page" aria-labelledby="catalog-title">
+      <header class="catalog-masthead">
+        <a class="catalog-brand" href="index.html" aria-label="Parallel Book Viewer home">
+          <span class="catalog-mark" aria-hidden="true">PB</span>
+          <span>Parallel Book Viewer</span>
+        </a>
+        <p>Sentence-aligned reading</p>
+      </header>
+
+      <main class="catalog-main" id="catalog-main">
+        <section class="catalog-intro">
+          <p class="eyebrow">Your local library</p>
+          <h1 id="catalog-title">Choose a book to read in parallel.</h1>
+          <p class="catalog-lede">
+            Open an aligned source and translation, navigate both editions together,
+            or focus on one language at a time.
+          </p>
+          <p class="catalog-count" id="catalog-count" aria-live="polite">Loading available books</p>
+        </section>
+
+        <div class="catalog-alert" id="catalog-alert" role="alert" hidden></div>
+        <section class="book-grid" id="book-list" aria-label="Available books"></section>
+
+        <section class="catalog-empty" id="catalog-empty" hidden>
+          <p class="eyebrow">Library empty</p>
+          <h2>No built books are available yet.</h2>
+          <p id="catalog-empty-message">
+            Add an external book manifest and build it to make it appear here.
+          </p>
+        </section>
+      </main>
+
+      <footer class="catalog-footer">
+        <span>Local-first reader</span>
+        <span aria-hidden="true">•</span>
+        <span>Source and translation stay together</span>
+      </footer>
+    </section>
+
+    <div class="app-shell" data-view="both" data-mode="offline" hidden>
       <header class="masthead">
         <div class="brand-block">
           <button class="icon-button toc-toggle" id="toc-toggle" type="button" aria-label="Toggle contents" aria-expanded="false">
             <span aria-hidden="true">☰</span>
           </button>
+          <a class="library-link" href="index.html" aria-label="Back to book catalog">← Library</a>
           <div>
             <p class="eyebrow">Parallel editions</p>
             <h1 id="brand-title">Parallel Book Reader</h1>

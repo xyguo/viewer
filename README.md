@@ -38,9 +38,9 @@ The repository does not contain books after a fresh clone. Restore or synchroniz
 
 ## Read a book
 
-Build at least one local external book, then open `index.html` directly. The complete source and target editions are embedded in the selected book's generated `document-data.js`. MathJax is loaded from a CDN, so typeset mathematics requires network access unless the script is vendored locally.
+Build at least one local external book, then open `index.html` directly. The startup page lists every built book in the local catalog; select a card to open its reader. The complete source and target editions are embedded in the selected book's generated `document-data.js`. MathJax is loaded from a CDN, so typeset mathematics requires network access unless the script is vendored locally.
 
-`book-viewer-build` regenerates `books/catalog.js` from all valid local manifests that have browser data. Select another catalog entry with a query parameter:
+`book-viewer-build` regenerates `books/catalog.js` from all valid local manifests that have browser data. Reader pages link back to the catalog. A specific book can also be opened directly with a query parameter:
 
 ```text
 index.html?book=another-book
