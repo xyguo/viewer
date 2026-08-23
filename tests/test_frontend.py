@@ -67,3 +67,14 @@ def test_reader_links_back_to_catalog_and_bootstrap_routes_by_book() -> None:
     assert "if (!requestedSlug)" in bootstrap
     assert "showCatalog();" in bootstrap
     assert "link.href = `?book=${encodeURIComponent(slug)}`" in bootstrap
+
+
+def test_reader_uses_independent_viewport_scrollers() -> None:
+    viewer_root = Path(__file__).resolve().parents[1]
+    styles = (viewer_root / "styles.css").read_text(encoding="utf-8")
+
+    assert ".app-shell {\n  height: 100%;\n  height: 100dvh;" in styles
+    assert "grid-template-rows: auto auto minmax(0, 1fr);" in styles
+    assert ".workspace {\n  min-height: 0;" in styles
+    assert "overflow-y: auto;\n  overscroll-behavior: contain;" in styles
+    assert ".pane-scroll {\n  min-height: 0;\n  height: auto;\n  overflow: auto;" in styles

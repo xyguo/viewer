@@ -293,7 +293,11 @@ button {
 }
 
 .app-shell {
-  min-height: 100%;
+  height: 100%;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .masthead {
@@ -435,15 +439,19 @@ button {
 }
 
 .workspace {
+  min-height: 0;
   display: grid;
   grid-template-columns: 252px minmax(0, 1fr);
-  min-height: calc(100vh - 137px);
+  overflow: hidden;
 }
 
 .toc-panel {
   min-height: 0;
   padding: 20px 14px 28px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   background: #f7f4ed;
   border-right: 1px solid var(--line);
 }
@@ -505,16 +513,20 @@ button {
 
 .reader {
   min-width: 0;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1px;
+  overflow: hidden;
   background: var(--line);
 }
 
 .language-pane {
   min-width: 0;
+  min-height: 0;
   display: grid;
   grid-template-rows: 50px minmax(0, 1fr);
+  overflow: hidden;
   background: var(--paper);
 }
 
@@ -552,7 +564,7 @@ button {
 
 .pane-scroll {
   min-height: 0;
-  height: calc(100vh - 187px);
+  height: auto;
   overflow: auto;
   overscroll-behavior: contain;
   scroll-behavior: auto;
@@ -934,16 +946,17 @@ button {
     content: " (source)";
   }
 
-  .pane-scroll {
-    height: calc(100vh - 235px);
-  }
-
   .document-content {
     padding: 34px 22px 100px;
   }
 }
 
 @media print {
+  .app-shell {
+    height: auto;
+    overflow: visible;
+  }
+
   .masthead,
   .control-bar,
   .toc-panel,
@@ -957,6 +970,7 @@ button {
   .reader,
   .language-pane {
     display: block;
+    overflow: visible;
   }
 
   .pane-scroll {
