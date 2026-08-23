@@ -1,0 +1,41 @@
+{
+  "slug": "proof-of-pcp",
+  "title": "Proof of the PCP Theorem",
+  "reader_title": "PCP Proof Reader",
+  "description": "Sentence-aligned Japanese and English lecture notes on the proof of the PCP theorem.",
+  "source": {
+    "language": "Japanese",
+    "label": "日本語",
+    "markdown": "../../../proof-of-pcp-jp.md",
+    "html_id_prefix": "source"
+  },
+  "target": {
+    "language": "English",
+    "label": "English",
+    "markdown": "../../../proof-of-pcp-en.md",
+    "html_id_prefix": "target"
+  },
+  "data_file": "document-data.js",
+  "asset_rewrites": {
+    "viewer/assets/": "books/proof-of-pcp/assets/"
+  },
+  "mathjax": {
+    "packages": ["ams", "newcommand", "mathtools", "physics"],
+    "macros": {
+      "P": "\\mathsf{P}",
+      "NP": "\\mathsf{NP}",
+      "PCP": "\\mathsf{PCP}",
+      "PSPACE": "\\mathsf{PSPACE}",
+      "IP": "\\mathsf{IP}",
+      "Ver": "\\operatorname{Ver}",
+      "Had": "\\operatorname{Had}",
+      "LinEq": "\\operatorname{LinEq}",
+      "QuadEQ": "\\operatorname{QuadEq}",
+      "ThreeQuadEQ": "\\operatorname{3\\text{-}QuadEq}",
+      "UNSAT": "\\operatorname{UNSAT}",
+      "val": "\\operatorname{val}",
+      "dist": "\\operatorname{dist}",
+      "size": "\\operatorname{size}"
+    }
+  }
+}

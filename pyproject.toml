@@ -15,7 +15,6 @@ dependencies = [
 
 [project.scripts]
 book-viewer-build = "book_viewer.cli:build_main"
-book-viewer-serve = "book_viewer.cli:serve_main"
 
 [dependency-groups]
 dev = [
@@ -81,4 +80,3 @@ pythonVersion = "3.12"
 typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
-
