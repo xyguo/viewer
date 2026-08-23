@@ -9,16 +9,19 @@ import pytest
 from pydantic import ValidationError
 
 from book_viewer.models import (
+    BookChapter,
+    BookChunkPayload,
     BookDocumentPayload,
     BookManifest,
     MathJaxManifest,
+    TocEntry,
     TranslationRequest,
 )
 
 
 def valid_manifest_data() -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "slug": "example-book",
         "title": "Example Book",
         "reader_title": "Example Reader",
@@ -66,7 +69,7 @@ def test_mathjax_manifest_rejects_duplicate_packages_and_invalid_macros() -> Non
 def test_document_payload_uses_camel_case_and_strict_counts() -> None:
     payload = BookDocumentPayload(
         slug="example-book",
-        schema_version=1,
+        schema_version=2,
         title="Example Book",
         reader_title="Example Reader",
         description="A test book.",
@@ -76,9 +79,19 @@ def test_document_payload_uses_camel_case_and_strict_counts() -> None:
         target_language="English",
         target_label="English",
         target_html_lang="en",
-        source_html='<span class="segment" data-seg="s1">源</span>',
-        target_html='<span class="segment" data-seg="s1">Target</span>',
         segment_count=1,
+        initial_chapter_id="s1",
+        chapters=[
+            BookChapter(
+                id="s1",
+                source_title="源",
+                target_title="Target",
+                source_data_file="books/example-book/document-data-chunks/001-source.js",
+                target_data_file="books/example-book/document-data-chunks/001-target.js",
+                segment_ids=["s1"],
+            )
+        ],
+        toc=[TocEntry(segment_id="s1", chapter_id="s1", level=1, title="源")],
         generated_at=datetime(2026, 1, 2, tzinfo=UTC),
         mathjax=MathJaxManifest(),
     )
@@ -92,8 +105,8 @@ def test_document_payload_uses_camel_case_and_strict_counts() -> None:
 
 
 def test_manifest_rejects_incompatible_schema_and_external_markdown_paths() -> None:
-    with pytest.raises(ValidationError, match="Input should be 1"):
-        BookManifest.model_validate({**valid_manifest_data(), "schema_version": 2})
+    with pytest.raises(ValidationError, match="Input should be 2"):
+        BookManifest.model_validate({**valid_manifest_data(), "schema_version": 1})
 
     invalid = valid_manifest_data()
     source = dict(cast(dict[str, object], invalid["source"]))
@@ -101,6 +114,54 @@ def test_manifest_rejects_incompatible_schema_and_external_markdown_paths() -> N
     invalid["source"] = source
     with pytest.raises(ValidationError, match="within the book directory"):
         BookManifest.model_validate(invalid)
+
+
+def test_document_payload_rejects_inconsistent_chapters_and_chunk_types() -> None:
+    chapter = BookChapter(
+        id="chapter-1",
+        source_title="Source",
+        target_title="Target",
+        source_data_file="source.js",
+        target_data_file="target.js",
+        segment_ids=["s1"],
+    )
+    common: dict[str, object] = {
+        "schema_version": 2,
+        "slug": "example-book",
+        "title": "Example Book",
+        "reader_title": "Example Reader",
+        "description": "A test book.",
+        "source_language": "Japanese",
+        "source_label": "日本語",
+        "source_html_lang": "ja",
+        "target_language": "English",
+        "target_label": "English",
+        "target_html_lang": "en",
+        "segment_count": 1,
+        "initial_chapter_id": "chapter-1",
+        "chapters": [chapter],
+        "toc": [
+            TocEntry(
+                segment_id="s1",
+                chapter_id="wrong-chapter",
+                level=1,
+                title="Source",
+            )
+        ],
+        "generated_at": datetime(2026, 1, 2, tzinfo=UTC),
+        "mathjax": MathJaxManifest(),
+    }
+    with pytest.raises(ValidationError, match="TOC entries"):
+        BookDocumentPayload.model_validate(common)
+
+    chunk = BookChunkPayload(
+        schema_version=2,
+        slug="example-book",
+        chapter_id="chapter-1",
+        language="source",
+        html='<p><span class="segment" data-seg="s1">Source.</span></p>',
+    )
+    assert chunk.model_dump(by_alias=True)["chapterId"] == "chapter-1"
 
 
 def test_translation_request_normalizes_text_and_rejects_loose_input() -> None:

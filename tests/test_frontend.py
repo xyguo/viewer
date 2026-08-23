@@ -67,6 +67,9 @@ def test_reader_links_back_to_catalog_and_bootstrap_routes_by_book() -> None:
     assert "if (!requestedSlug)" in bootstrap
     assert "showCatalog();" in bootstrap
     assert "link.href = `?book=${encodeURIComponent(slug)}`" in bootstrap
+    assert "typeset: false" in bootstrap
+    assert markup.by_id("previous-chapter").attributes["aria-label"] == "Previous chapter"
+    assert markup.by_id("next-chapter").attributes["aria-label"] == "Next chapter"
 
 
 def test_reader_uses_independent_viewport_scrollers() -> None:
@@ -78,3 +81,15 @@ def test_reader_uses_independent_viewport_scrollers() -> None:
     assert ".workspace {\n  min-height: 0;" in styles
     assert "overflow-y: auto;\n  overscroll-behavior: contain;" in styles
     assert ".pane-scroll {\n  min-height: 0;\n  height: auto;\n  overflow: auto;" in styles
+
+
+def test_reader_loads_chapters_and_avoids_linear_scroll_scans() -> None:
+    viewer_root = Path(__file__).resolve().parents[1]
+    app = (viewer_root / "app.js").read_text(encoding="utf-8")
+
+    assert "window.BOOK_VIEWER_CHUNKS" in app
+    assert "function loadChapter(" in app
+    assert "function prefetchAdjacentChapters(" in app
+    assert "function firstVisibleSegment(" in app
+    assert "while (low <= high)" in app
+    assert "originSegments.find" not in app

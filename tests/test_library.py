@@ -32,7 +32,7 @@ def write_external_book(
         json.dumps(
             {
                 "$schema": "../../schemas/book.schema.json",
-                "schema_version": 1,
+                "schema_version": 2,
                 "slug": manifest_slug or slug,
                 "title": f"Title {slug}",
                 "reader_title": f"Reader {slug}",
@@ -99,7 +99,7 @@ def test_build_catalog_includes_only_built_books(tmp_path: Path) -> None:
     catalog = json.loads(raw_catalog)
     assert result.book_count == 2
     assert catalog == {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "defaultBook": "available-book",
         "books": {
             "available-book": {

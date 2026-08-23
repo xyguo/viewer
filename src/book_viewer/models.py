@@ -7,9 +7,9 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-BOOK_SCHEMA_VERSION = 1
+BOOK_SCHEMA_VERSION = 2
 
 
 def _to_camel(value: str) -> str:
@@ -85,7 +85,7 @@ class BookManifest(StrictModel):
     """Book-specific inputs and reader presentation metadata."""
 
     schema_uri: str | None = Field(default=None, alias="$schema")
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     title: str = Field(min_length=1, max_length=300)
     reader_title: str = Field(min_length=1, max_length=120)
@@ -130,8 +130,8 @@ class BookManifest(StrictModel):
         return (manifest_path.parent / self.data_file).resolve()
 
 
-class BookDocumentPayload(StrictModel):
-    """Validated data serialized for the generic browser application."""
+class BrowserModel(StrictModel):
+    """Strict camel-case contract serialized for the browser."""
 
     model_config = ConfigDict(
         alias_generator=_to_camel,
@@ -141,7 +141,40 @@ class BookDocumentPayload(StrictModel):
         strict=True,
     )
 
-    schema_version: Literal[1]
+
+class BookChapter(BrowserModel):
+    """Metadata for one independently loadable aligned chapter."""
+
+    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    source_title: str = Field(min_length=1, max_length=300)
+    target_title: str = Field(min_length=1, max_length=300)
+    source_data_file: str = Field(min_length=1)
+    target_data_file: str = Field(min_length=1)
+    segment_ids: list[str] = Field(min_length=1)
+
+    @field_validator("segment_ids")
+    @classmethod
+    def require_unique_segment_ids(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("chapter segment IDs must be unique")
+        if any(not value or value != value.strip() for value in values):
+            raise ValueError("chapter segment IDs must be non-empty and trimmed")
+        return values
+
+
+class TocEntry(BrowserModel):
+    """One full-book table-of-contents link."""
+
+    segment_id: str = Field(min_length=1)
+    chapter_id: str = Field(min_length=1)
+    level: int = Field(ge=1, le=3)
+    title: str = Field(min_length=1, max_length=500)
+
+
+class BookDocumentPayload(BrowserModel):
+    """Metadata serialized separately from lazily loaded chapter HTML."""
+
+    schema_version: Literal[2]
     slug: str
     title: str
     reader_title: str
@@ -152,11 +185,47 @@ class BookDocumentPayload(StrictModel):
     target_language: str
     target_label: str
     target_html_lang: str
-    source_html: str
-    target_html: str
     segment_count: int = Field(ge=1)
+    initial_chapter_id: str
+    chapters: list[BookChapter] = Field(min_length=1)
+    toc: list[TocEntry] = Field(min_length=1)
     generated_at: datetime
     mathjax: MathJaxManifest
+
+    @model_validator(mode="after")
+    def validate_chapter_index(self) -> BookDocumentPayload:
+        chapter_ids = [chapter.id for chapter in self.chapters]
+        if len(chapter_ids) != len(set(chapter_ids)):
+            raise ValueError("chapter IDs must be unique")
+        if self.initial_chapter_id not in chapter_ids:
+            raise ValueError("initial_chapter_id must reference a chapter")
+
+        segment_ids = [
+            segment_id for chapter in self.chapters for segment_id in chapter.segment_ids
+        ]
+        if len(segment_ids) != self.segment_count:
+            raise ValueError("segment_count must equal the chapter segment total")
+        if len(segment_ids) != len(set(segment_ids)):
+            raise ValueError("segment IDs must be unique across chapters")
+
+        segment_chapters = {
+            segment_id: chapter.id
+            for chapter in self.chapters
+            for segment_id in chapter.segment_ids
+        }
+        if any(segment_chapters.get(entry.segment_id) != entry.chapter_id for entry in self.toc):
+            raise ValueError("TOC entries must reference matching chapter segments")
+        return self
+
+
+class BookChunkPayload(BrowserModel):
+    """One language edition of one independently loadable chapter."""
+
+    schema_version: Literal[2]
+    slug: str
+    chapter_id: str
+    language: Literal["source", "target"]
+    html: str = Field(min_length=1)
 
 
 class BuildResult(StrictModel):
@@ -164,17 +233,10 @@ class BuildResult(StrictModel):
 
     output_path: Path
     segment_count: int = Field(ge=1)
+    chapter_count: int = Field(ge=1)
 
 
-class CatalogEntry(StrictModel):
-    model_config = ConfigDict(
-        alias_generator=_to_camel,
-        extra="forbid",
-        frozen=True,
-        populate_by_name=True,
-        strict=True,
-    )
-
+class CatalogEntry(BrowserModel):
     title: str = Field(min_length=1, max_length=300)
     description: str | None = Field(default=None, min_length=1, max_length=500)
     source_label: str | None = Field(default=None, min_length=1, max_length=80)
@@ -182,16 +244,8 @@ class CatalogEntry(StrictModel):
     data_file: str = Field(min_length=1)
 
 
-class BookCatalog(StrictModel):
-    model_config = ConfigDict(
-        alias_generator=_to_camel,
-        extra="forbid",
-        frozen=True,
-        populate_by_name=True,
-        strict=True,
-    )
-
-    schema_version: Literal[1]
+class BookCatalog(BrowserModel):
+    schema_version: Literal[2]
     default_book: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     books: dict[str, CatalogEntry] = Field(min_length=1)
 

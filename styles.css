@@ -429,6 +429,40 @@ button {
   opacity: 0.42;
 }
 
+.chapter-controls {
+  gap: 2px;
+}
+
+.chapter-button {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.chapter-button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 65%);
+}
+
+.chapter-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.32;
+}
+
+.chapter-position {
+  min-width: 48px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  text-align: center;
+}
+
 .mode-note {
   flex: 1;
   min-width: 260px;
@@ -527,6 +561,7 @@ button {
   display: grid;
   grid-template-rows: 50px minmax(0, 1fr);
   overflow: hidden;
+  contain: layout paint;
   background: var(--paper);
 }
 
@@ -731,14 +766,12 @@ button {
   display: none;
 }
 
-.app-shell[data-view="source"] .document-content,
-.app-shell[data-view="target"] .document-content {
-  max-width: 920px;
-  font-size: clamp(1rem, 1.5vw, 1.15rem);
-}
-
 .app-shell[data-mode="online"] .view-controls {
   opacity: 0.68;
+}
+
+.app-shell.is-loading-chapter .reader {
+  cursor: progress;
 }
 
 .translation-popover {

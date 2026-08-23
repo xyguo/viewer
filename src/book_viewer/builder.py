@@ -7,17 +7,29 @@ import re
 import shutil
 import subprocess
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from html.parser import HTMLParser
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import Literal
 
-from .models import BOOK_SCHEMA_VERSION, BookDocumentPayload, BookManifest, BuildResult
+from .models import (
+    BOOK_SCHEMA_VERSION,
+    BookChapter,
+    BookChunkPayload,
+    BookDocumentPayload,
+    BookManifest,
+    BuildResult,
+    TocEntry,
+)
 
 ID_RE = re.compile(r'\bid="([^"]+)"')
 HREF_RE = re.compile(r'href="#([^"]+)"')
 TAG_RE = re.compile(r"\\tag\{([^{}]+)\}")
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+CHAPTER_START_RE = re.compile(r"(?=<h1\b)", re.IGNORECASE)
 DOCUMENT_VARIABLE = "window.BOOK_VIEWER_DOCUMENT"
+CHUNKS_VARIABLE = "window.BOOK_VIEWER_CHUNKS"
 
 MarkdownRenderer = Callable[[str], str]
 
@@ -44,6 +56,60 @@ class SegmentHTMLParser(HTMLParser):
         self.handle_starttag(tag, attrs)
 
 
+@dataclass(frozen=True, slots=True)
+class ParsedHeading:
+    level: int
+    segment_id: str
+    title: str
+
+
+class HeadingHTMLParser(HTMLParser):
+    """Collect visible heading labels and their sentence segment identifiers."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.headings: list[ParsedHeading] = []
+        self._tag: str | None = None
+        self._level: int | None = None
+        self._segment_id: str | None = None
+        self._text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"h1", "h2", "h3"} and self._tag is None:
+            self._tag = tag
+            self._level = int(tag[1])
+            self._segment_id = None
+            self._text = []
+            return
+        if self._tag is None or self._segment_id is not None:
+            return
+        attributes = dict(attrs)
+        classes = set((attributes.get("class") or "").split())
+        if "segment" in classes:
+            self._segment_id = (attributes.get("data-seg") or "").strip() or None
+
+    def handle_data(self, data: str) -> None:
+        if self._tag is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag != self._tag:
+            return
+        title = " ".join("".join(self._text).split())
+        if self._level is not None and self._segment_id and title:
+            self.headings.append(
+                ParsedHeading(
+                    level=self._level,
+                    segment_id=self._segment_id,
+                    title=title,
+                )
+            )
+        self._tag = None
+        self._level = None
+        self._segment_id = None
+        self._text = []
+
+
 def load_manifest(manifest_path: Path) -> BookManifest:
     """Load a strict book manifest from JSON."""
 
@@ -55,6 +121,30 @@ def rendered_segment_ids(html: str) -> list[str]:
     parser.feed(html)
     parser.close()
     return parser.ids
+
+
+def rendered_headings(html: str) -> list[ParsedHeading]:
+    parser = HeadingHTMLParser()
+    parser.feed(html)
+    parser.close()
+    return parser.headings
+
+
+def split_rendered_chapters(html: str) -> list[str]:
+    """Split rendered HTML at top-level chapter headings."""
+
+    starts = [match.start() for match in CHAPTER_START_RE.finditer(html)]
+    if not starts:
+        return [html.strip()]
+
+    preamble = html[: starts[0]].strip()
+    boundaries = [*starts, len(html)]
+    chapters = [
+        html[boundaries[index] : boundaries[index + 1]].strip() for index in range(len(starts))
+    ]
+    if preamble:
+        chapters[0] = f"{preamble}\n{chapters[0]}"
+    return [chapter for chapter in chapters if chapter]
 
 
 def validate_rendered_segments(source_html: str, target_html: str) -> list[str]:
@@ -201,6 +291,21 @@ def serialize_document(payload: BookDocumentPayload) -> str:
     return f"{DOCUMENT_VARIABLE} = {json.dumps(data, ensure_ascii=False, separators=(',', ':'))};\n"
 
 
+def chunk_key(slug: str, chapter_id: str, language: str) -> str:
+    return f"{slug}:{chapter_id}:{language}"
+
+
+def serialize_chunk(payload: BookChunkPayload) -> str:
+    data = payload.model_dump(mode="json", by_alias=True)
+    key = chunk_key(payload.slug, payload.chapter_id, payload.language)
+    serialized_key = json.dumps(key, ensure_ascii=False)
+    serialized_data = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return (
+        f"{CHUNKS_VARIABLE} = {CHUNKS_VARIABLE} || {{}};"
+        f"{CHUNKS_VARIABLE}[{serialized_key}] = {serialized_data};\n"
+    )
+
+
 def build_book(
     manifest_path: Path,
     *,
@@ -240,9 +345,78 @@ def build_book(
         manifest.asset_rewrites,
     )
 
+    source_chapters = split_rendered_chapters(source_html)
+    target_chapters = split_rendered_chapters(target_html)
+    if len(source_chapters) != len(target_chapters):
+        raise ValueError(
+            "Chapter boundaries differ between editions: "
+            f"source={len(source_chapters)}, target={len(target_chapters)}."
+        )
+
     timestamp = generated_at or datetime.now(UTC)
     if timestamp.tzinfo is None or timestamp.utcoffset() is None:
         raise ValueError("generated_at must include timezone information")
+
+    chunk_dir = output_path.parent / f"{output_path.stem}-chunks"
+    relative_chunk_dir = chunk_dir.relative_to(resolved_manifest_path.parent)
+    browser_chunk_dir = PurePosixPath("books", manifest.slug, *relative_chunk_dir.parts)
+    chapters: list[BookChapter] = []
+    segment_to_chapter: dict[str, str] = {}
+    chunk_outputs: dict[str, str] = {}
+
+    for index, (source_chapter, target_chapter) in enumerate(
+        zip(source_chapters, target_chapters, strict=True),
+        start=1,
+    ):
+        chapter_segment_ids = validate_rendered_segments(source_chapter, target_chapter)
+        chapter_id = chapter_segment_ids[0]
+        source_headings = rendered_headings(source_chapter)
+        target_headings = rendered_headings(target_chapter)
+        source_title = source_headings[0].title if source_headings else chapter_id
+        target_title = target_headings[0].title if target_headings else chapter_id
+        source_name = f"{index:03d}-source.js"
+        target_name = f"{index:03d}-target.js"
+
+        chunk_specs: tuple[
+            tuple[Literal["source", "target"], str, str],
+            tuple[Literal["source", "target"], str, str],
+        ] = (
+            ("source", source_name, source_chapter),
+            ("target", target_name, target_chapter),
+        )
+        for language, name, chapter_html in chunk_specs:
+            chunk_payload = BookChunkPayload(
+                schema_version=BOOK_SCHEMA_VERSION,
+                slug=manifest.slug,
+                chapter_id=chapter_id,
+                language=language,
+                html=chapter_html,
+            )
+            chunk_outputs[name] = serialize_chunk(chunk_payload)
+
+        for segment_id in chapter_segment_ids:
+            segment_to_chapter[segment_id] = chapter_id
+        chapters.append(
+            BookChapter(
+                id=chapter_id,
+                source_title=source_title,
+                target_title=target_title,
+                source_data_file=(browser_chunk_dir / source_name).as_posix(),
+                target_data_file=(browser_chunk_dir / target_name).as_posix(),
+                segment_ids=chapter_segment_ids,
+            )
+        )
+
+    toc = [
+        TocEntry(
+            segment_id=heading.segment_id,
+            chapter_id=segment_to_chapter[heading.segment_id],
+            level=heading.level,
+            title=heading.title,
+        )
+        for heading in rendered_headings(source_html)
+    ]
+
     payload = BookDocumentPayload(
         schema_version=BOOK_SCHEMA_VERSION,
         slug=manifest.slug,
@@ -255,12 +429,23 @@ def build_book(
         target_language=manifest.target.language,
         target_label=manifest.target.label,
         target_html_lang=manifest.target.html_lang,
-        source_html=source_html,
-        target_html=target_html,
         segment_count=len(segment_ids),
+        initial_chapter_id=chapters[0].id,
+        chapters=chapters,
+        toc=toc,
         generated_at=timestamp,
         mathjax=manifest.mathjax,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    for name, content in chunk_outputs.items():
+        (chunk_dir / name).write_text(content, encoding="utf-8")
+    for stale_path in chunk_dir.glob("*.js"):
+        if stale_path.name not in chunk_outputs:
+            stale_path.unlink()
     output_path.write_text(serialize_document(payload), encoding="utf-8")
-    return BuildResult(output_path=output_path, segment_count=len(segment_ids))
+    return BuildResult(
+        output_path=output_path,
+        segment_count=len(segment_ids),
+        chapter_count=len(chapters),
+    )

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const SUPPORTED_BOOK_SCHEMA_VERSION = 1;
+  const SUPPORTED_BOOK_SCHEMA_VERSION = 2;
   const MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js";
   const catalogPage = document.querySelector("#catalog-page");
   const catalogCount = document.querySelector("#catalog-count");
@@ -33,6 +33,7 @@
         skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
       },
       startup: {
+        typeset: false,
         ready() {
           window.MathJax.startup.defaultReady();
           window.MathJax.startup.promise.then(() => {

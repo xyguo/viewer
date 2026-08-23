@@ -31,7 +31,7 @@ def write_test_book(tmp_path: Path) -> Path:
     manifest_path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "slug": "example-book",
                 "title": "Example Book",
                 "reader_title": "Example Reader",
@@ -69,16 +69,100 @@ def test_build_book_generates_validated_browser_data(tmp_path: Path) -> None:
     result = builder.build_book(manifest_path, renderer=renderer, generated_at=timestamp)
 
     assert result.segment_count == 1
+    assert result.chapter_count == 1
     output = result.output_path.read_text(encoding="utf-8")
     assert output.startswith("window.BOOK_VIEWER_DOCUMENT = ")
     raw_payload = output.removeprefix("window.BOOK_VIEWER_DOCUMENT = ").removesuffix(";\n")
     payload = json.loads(raw_payload)
     assert payload["slug"] == "example-book"
-    assert payload["schemaVersion"] == 1
+    assert payload["schemaVersion"] == 2
     assert payload["generatedAt"] == "2026-08-23T12:00:00Z"
-    assert 'id="source-chapter"' in payload["sourceHtml"]
-    assert 'href="#target-chapter"' in payload["targetHtml"]
-    assert 'src="books/example-book/assets/figure.png"' in payload["sourceHtml"]
+    assert payload["initialChapterId"] == "s1"
+    assert payload["chapters"] == [
+        {
+            "id": "s1",
+            "sourceTitle": "源",
+            "targetTitle": "Target",
+            "sourceDataFile": "books/example-book/document-data-chunks/001-source.js",
+            "targetDataFile": "books/example-book/document-data-chunks/001-target.js",
+            "segmentIds": ["s1"],
+        }
+    ]
+    assert payload["toc"] == [{"segmentId": "s1", "chapterId": "s1", "level": 1, "title": "源"}]
+
+    source_chunk = (manifest_path.parent / "document-data-chunks" / "001-source.js").read_text(
+        encoding="utf-8"
+    )
+    target_chunk = (manifest_path.parent / "document-data-chunks" / "001-target.js").read_text(
+        encoding="utf-8"
+    )
+    source_payload = json.loads(source_chunk.split("] = ", maxsplit=1)[1].removesuffix(";\n"))
+    target_payload = json.loads(target_chunk.split("] = ", maxsplit=1)[1].removesuffix(";\n"))
+    assert 'id="source-chapter"' in source_payload["html"]
+    assert 'href="#target-chapter"' in target_payload["html"]
+    assert 'src="books/example-book/assets/figure.png"' in source_payload["html"]
+    assert source_payload["schemaVersion"] == 2
+    assert target_payload["language"] == "target"
+
+
+def test_build_book_splits_chapters_and_removes_stale_chunks(tmp_path: Path) -> None:
+    manifest_path = write_test_book(tmp_path)
+    chunk_dir = tmp_path / "document-data-chunks"
+    chunk_dir.mkdir()
+    stale_chunk = chunk_dir / "999-source.js"
+    stale_chunk.write_text("stale", encoding="utf-8")
+
+    def renderer(markdown: str) -> str:
+        first = "源" if "源" in markdown else "Target"
+        return segment_html("s1", first, heading_id="one") + segment_html(
+            "s2", "Second", heading_id="two"
+        )
+
+    result = builder.build_book(manifest_path, renderer=renderer)
+
+    assert result.chapter_count == 2
+    assert not stale_chunk.exists()
+    assert sorted(path.name for path in chunk_dir.glob("*.js")) == [
+        "001-source.js",
+        "001-target.js",
+        "002-source.js",
+        "002-target.js",
+    ]
+
+
+def test_build_book_preserves_nested_data_directory_in_chunk_urls(tmp_path: Path) -> None:
+    manifest_path = write_test_book(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["data_file"] = "generated/document.js"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    def renderer(markdown: str) -> str:
+        return segment_html("s1", markdown)
+
+    result = builder.build_book(manifest_path, renderer=renderer)
+    raw_payload = result.output_path.read_text(encoding="utf-8")
+    payload = json.loads(
+        raw_payload.removeprefix("window.BOOK_VIEWER_DOCUMENT = ").removesuffix(";\n")
+    )
+
+    assert payload["chapters"][0]["sourceDataFile"] == (
+        "books/example-book/generated/document-chunks/001-source.js"
+    )
+    assert (tmp_path / "generated" / "document-chunks" / "001-source.js").is_file()
+
+
+def test_build_book_rejects_different_chapter_boundaries(tmp_path: Path) -> None:
+    manifest_path = write_test_book(tmp_path)
+
+    def renderer(markdown: str) -> str:
+        first = segment_html("s1", "First", heading_id="one")
+        second = segment_html("s2", "Second", heading_id="two")
+        if "源" in markdown:
+            return first + second
+        return first + second.replace("<h1", "<h2").replace("</h1>", "</h2>")
+
+    with pytest.raises(ValueError, match="Chapter boundaries differ"):
+        builder.build_book(manifest_path, renderer=renderer)
 
 
 def test_build_book_rejects_naive_timestamp(tmp_path: Path) -> None:

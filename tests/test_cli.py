@@ -25,7 +25,7 @@ def test_run_build_uses_selected_manifest(
 
     def fake_build(path: Path) -> BuildResult:
         captured.append(path)
-        return BuildResult(output_path=output_path, segment_count=7)
+        return BuildResult(output_path=output_path, segment_count=7, chapter_count=2)
 
     def fake_catalog(books_dir: Path, *, default_book: str | None) -> CatalogBuildResult:
         catalog_calls.append((books_dir, default_book))
@@ -38,6 +38,7 @@ def test_run_build_uses_selected_manifest(
     assert catalog_calls == [(manifest_path.parent.parent, "example-book")]
     output = capsys.readouterr().out
     assert "7 aligned segments" in output
+    assert "across 2 chapters" in output
     assert "1 available book." in output
 
 
