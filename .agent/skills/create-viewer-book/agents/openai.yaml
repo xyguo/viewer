@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Viewer Book"
+  short_description: "Prepare aligned translated books for the viewer"
+  default_prompt: "Use $create-viewer-book to turn this source document into a validated bilingual viewer book."
