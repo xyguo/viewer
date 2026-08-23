@@ -15,7 +15,9 @@ dependencies = [
 
 [project.scripts]
 book-viewer-build = "book_viewer.cli:build_main"
+book-viewer-schema = "book_viewer.cli:schema_main"
 book-viewer-serve = "book_viewer.cli:serve_main"
+book-viewer-validate = "book_viewer.cli:validate_main"
 
 [dependency-groups]
 dev = [

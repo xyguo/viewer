@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
@@ -17,6 +18,7 @@ from book_viewer.models import (
 
 def valid_manifest_data() -> dict[str, object]:
     return {
+        "schema_version": 1,
         "slug": "example-book",
         "title": "Example Book",
         "reader_title": "Example Reader",
@@ -64,6 +66,7 @@ def test_mathjax_manifest_rejects_duplicate_packages_and_invalid_macros() -> Non
 def test_document_payload_uses_camel_case_and_strict_counts() -> None:
     payload = BookDocumentPayload(
         slug="example-book",
+        schema_version=1,
         title="Example Book",
         reader_title="Example Reader",
         description="A test book.",
@@ -86,6 +89,18 @@ def test_document_payload_uses_camel_case_and_strict_counts() -> None:
     invalid = {**dumped, "segmentCount": "1"}
     with pytest.raises(ValidationError, match="valid integer"):
         BookDocumentPayload.model_validate(invalid)
+
+
+def test_manifest_rejects_incompatible_schema_and_external_markdown_paths() -> None:
+    with pytest.raises(ValidationError, match="Input should be 1"):
+        BookManifest.model_validate({**valid_manifest_data(), "schema_version": 2})
+
+    invalid = valid_manifest_data()
+    source = dict(cast(dict[str, object], invalid["source"]))
+    source["markdown"] = "../outside.md"
+    invalid["source"] = source
+    with pytest.raises(ValidationError, match="within the book directory"):
+        BookManifest.model_validate(invalid)
 
 
 def test_translation_request_normalizes_text_and_rejects_loose_input() -> None:

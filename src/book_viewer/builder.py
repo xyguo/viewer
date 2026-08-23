@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 
-from .models import BookDocumentPayload, BookManifest, BuildResult
+from .models import BOOK_SCHEMA_VERSION, BookDocumentPayload, BookManifest, BuildResult
 
 ID_RE = re.compile(r'\bid="([^"]+)"')
 HREF_RE = re.compile(r'href="#([^"]+)"')
@@ -244,6 +244,7 @@ def build_book(
     if timestamp.tzinfo is None or timestamp.utcoffset() is None:
         raise ValueError("generated_at must include timezone information")
     payload = BookDocumentPayload(
+        schema_version=BOOK_SCHEMA_VERSION,
         slug=manifest.slug,
         title=manifest.title,
         reader_title=manifest.reader_title,

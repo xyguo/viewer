@@ -9,4 +9,4 @@ uv run --offline ruff format --check src tests
 uv run --offline ruff check src tests
 uv run --offline pyright
 uv run --offline pytest
-
+uv run --offline book-viewer-validate --books-dir books

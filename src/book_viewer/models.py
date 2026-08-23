@@ -9,6 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+BOOK_SCHEMA_VERSION = 1
+
 
 def _to_camel(value: str) -> str:
     first, *rest = value.split("_")
@@ -18,7 +20,12 @@ def _to_camel(value: str) -> str:
 class StrictModel(BaseModel):
     """Base model that rejects coercion and unknown configuration keys."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        populate_by_name=True,
+        strict=True,
+    )
 
 
 class EditionManifest(StrictModel):
@@ -35,6 +42,16 @@ class EditionManifest(StrictModel):
     def reject_surrounding_whitespace(cls, value: str) -> str:
         if value != value.strip():
             raise ValueError("must not have surrounding whitespace")
+        return value
+
+    @field_validator("markdown")
+    @classmethod
+    def require_book_local_markdown(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("markdown must stay within the book directory")
+        if path.suffix.lower() not in {".md", ".markdown"}:
+            raise ValueError("markdown must reference a Markdown file")
         return value
 
 
@@ -67,6 +84,8 @@ class MathJaxManifest(StrictModel):
 class BookManifest(StrictModel):
     """Book-specific inputs and reader presentation metadata."""
 
+    schema_uri: str | None = Field(default=None, alias="$schema")
+    schema_version: Literal[1]
     slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     title: str = Field(min_length=1, max_length=300)
     reader_title: str = Field(min_length=1, max_length=120)
@@ -122,6 +141,7 @@ class BookDocumentPayload(StrictModel):
         strict=True,
     )
 
+    schema_version: Literal[1]
     slug: str
     title: str
     reader_title: str
@@ -144,6 +164,38 @@ class BuildResult(StrictModel):
 
     output_path: Path
     segment_count: int = Field(ge=1)
+
+
+class CatalogEntry(StrictModel):
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        extra="forbid",
+        frozen=True,
+        populate_by_name=True,
+        strict=True,
+    )
+
+    title: str = Field(min_length=1, max_length=300)
+    data_file: str = Field(min_length=1)
+
+
+class BookCatalog(StrictModel):
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        extra="forbid",
+        frozen=True,
+        populate_by_name=True,
+        strict=True,
+    )
+
+    schema_version: Literal[1]
+    default_book: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    books: dict[str, CatalogEntry] = Field(min_length=1)
+
+
+class CatalogBuildResult(StrictModel):
+    output_path: Path
+    book_count: int = Field(ge=1)
 
 
 MAX_SENTENCE_CHARS = 4_000

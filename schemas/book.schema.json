@@ -1,0 +1,146 @@
+{
+  "$defs": {
+    "EditionManifest": {
+      "additionalProperties": false,
+      "description": "Book-specific metadata for one language edition.",
+      "properties": {
+        "html_id_prefix": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Html Id Prefix",
+          "type": "string"
+        },
+        "html_lang": {
+          "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+          "title": "Html Lang",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "language": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Language",
+          "type": "string"
+        },
+        "markdown": {
+          "minLength": 1,
+          "title": "Markdown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "language",
+        "label",
+        "html_lang",
+        "markdown",
+        "html_id_prefix"
+      ],
+      "title": "EditionManifest",
+      "type": "object"
+    },
+    "MathJaxManifest": {
+      "additionalProperties": false,
+      "description": "Optional per-book MathJax extensions and macros.",
+      "properties": {
+        "macros": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Macros",
+          "type": "object"
+        },
+        "packages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Packages",
+          "type": "array"
+        }
+      },
+      "title": "MathJaxManifest",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Book-specific inputs and reader presentation metadata.",
+  "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "$Schema"
+    },
+    "asset_rewrites": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Asset Rewrites",
+      "type": "object"
+    },
+    "data_file": {
+      "default": "document-data.js",
+      "minLength": 1,
+      "title": "Data File",
+      "type": "string"
+    },
+    "description": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "mathjax": {
+      "$ref": "#/$defs/MathJaxManifest"
+    },
+    "reader_title": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Reader Title",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "slug": {
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Slug",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/EditionManifest"
+    },
+    "target": {
+      "$ref": "#/$defs/EditionManifest"
+    },
+    "title": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "slug",
+    "title",
+    "reader_title",
+    "description",
+    "source",
+    "target"
+  ],
+  "title": "BookManifest",
+  "type": "object"
+}

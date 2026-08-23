@@ -31,6 +31,7 @@ def write_test_book(tmp_path: Path) -> Path:
     manifest_path.write_text(
         json.dumps(
             {
+                "schema_version": 1,
                 "slug": "example-book",
                 "title": "Example Book",
                 "reader_title": "Example Reader",
@@ -73,6 +74,7 @@ def test_build_book_generates_validated_browser_data(tmp_path: Path) -> None:
     raw_payload = output.removeprefix("window.BOOK_VIEWER_DOCUMENT = ").removesuffix(";\n")
     payload = json.loads(raw_payload)
     assert payload["slug"] == "example-book"
+    assert payload["schemaVersion"] == 1
     assert payload["generatedAt"] == "2026-08-23T12:00:00Z"
     assert 'id="source-chapter"' in payload["sourceHtml"]
     assert 'href="#target-chapter"' in payload["targetHtml"]

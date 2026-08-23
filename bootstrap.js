@@ -1,6 +1,7 @@
 (() => {
   "use strict";
 
+  const SUPPORTED_BOOK_SCHEMA_VERSION = 1;
   const MATHJAX_URL = "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js";
 
   function fail(message) {
@@ -50,6 +51,10 @@
       fail("The book catalog is missing or invalid.");
       return;
     }
+    if (catalog.schemaVersion !== SUPPORTED_BOOK_SCHEMA_VERSION) {
+      fail("The local book catalog is incompatible with this viewer version. Rebuild it.");
+      return;
+    }
 
     const requestedSlug = new URLSearchParams(location.search).get("book");
     const slug = requestedSlug || catalog.defaultBook;
@@ -67,6 +72,10 @@
         fail(`The data loaded for '${slug}' is missing or inconsistent.`);
         return;
       }
+      if (documentData.schemaVersion !== SUPPORTED_BOOK_SCHEMA_VERSION) {
+        fail(`The data for '${slug}' is incompatible with this viewer version. Rebuild it.`);
+        return;
+      }
       configureMathJax(documentData);
       window.BookViewer.initialize(documentData);
       loadMathJax();
@@ -77,4 +86,3 @@
 
   loadSelectedBook();
 })();
-

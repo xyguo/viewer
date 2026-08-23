@@ -1,6 +1,8 @@
 .venv/
 .uv-cache/
 .env
+/books/*
+!/books/.gitkeep
 .coverage
 coverage.xml
 htmlcov/
