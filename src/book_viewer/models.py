@@ -199,13 +199,13 @@ class ChatMessage(StrictModel):
 class ChatCompletionRequest(StrictModel):
     model: str = Field(min_length=1)
     messages: list[ChatMessage] = Field(min_length=2)
-    temperature: int = Field(default=0, ge=0)
+    temperature: float = Field(default=0.0, ge=0, le=2)
     max_tokens: int = Field(default=900, ge=1)
     stream: Literal[False] = False
 
 
 class UpstreamModel(BaseModel):
-    """Strict known fields while allowing llama.cpp response metadata."""
+    """Strict known fields while allowing provider-specific response metadata."""
 
     model_config = ConfigDict(extra="ignore", strict=True)
 

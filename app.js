@@ -246,7 +246,7 @@
       state.offlineView = state.view;
       setView("source", true);
       statusLabel.textContent = "Live translation";
-      modeNote.textContent = `Click a ${data.sourceLanguage} sentence to translate it with nearby context. Live mode requires the reader server and llama.cpp SSH tunnel.`;
+      modeNote.textContent = `Click a ${data.sourceLanguage} sentence to translate it with nearby context. Live mode requires the reader server and a configured Chat Completions service.`;
     } else {
       setView(state.offlineView || "both", true);
       statusLabel.textContent = "Offline edition";

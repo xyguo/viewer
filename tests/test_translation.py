@@ -1,4 +1,4 @@
-"""Unit tests for the llama.cpp translation client and cache."""
+"""Unit tests for the provider-neutral Chat Completions client and cache."""
 
 from __future__ import annotations
 
@@ -10,10 +10,16 @@ from types import TracebackType
 from typing import Self
 
 import pytest
+from pydantic import AnyHttpUrl, SecretStr
 
 from book_viewer.models import TranslationRequest
 from book_viewer.settings import ServerSettings
-from book_viewer.translation import LlamaCppTranslator, TranslationCache, TranslationError
+from book_viewer.translation import (
+    OpenAICompatibleTranslator,
+    TranslationCache,
+    TranslationError,
+    UnconfiguredTranslator,
+)
 
 
 class FakeResponse:
@@ -60,20 +66,23 @@ def translation_request() -> TranslationRequest:
     )
 
 
-def test_llama_cpp_request_uses_context_without_authorization(tmp_path: Path) -> None:
+def test_chat_request_uses_context_without_authorization(tmp_path: Path) -> None:
     settings = ServerSettings(
         static_root=tmp_path,
-        translation_model="configured-model",
+        chat_completions_url=AnyHttpUrl("http://localhost:8080/v1/chat/completions"),
+        chat_model="configured-model",
         request_timeout_seconds=12.5,
+        temperature=0.25,
+        max_tokens=700,
     )
     opener = FakeUrlOpen(
         FakeResponse({"choices": [{"message": {"role": "assistant", "content": "Translated."}}]})
     )
-    translator = LlamaCppTranslator(settings, urlopen=opener)
+    translator = OpenAICompatibleTranslator(settings, urlopen=opener)
 
     assert translator.translate(translation_request()) == "Translated."
     request, timeout = opener.requests[0]
-    assert request.full_url == "http://127.0.0.1:8080/v1/chat/completions"
+    assert request.full_url == "http://localhost:8080/v1/chat/completions"
     assert timeout == 12.5
     assert request.get_header("Authorization") is None
     assert isinstance(request.data, bytes)
@@ -83,18 +92,44 @@ def test_llama_cpp_request_uses_context_without_authorization(tmp_path: Path) ->
     assert "前の文です。" in payload["messages"][0]["content"]
     assert "次の文です。" in payload["messages"][0]["content"]
     assert payload["stream"] is False
+    assert payload["temperature"] == 0.25
+    assert payload["max_tokens"] == 700
 
 
-def test_llama_cpp_rejects_invalid_response(tmp_path: Path) -> None:
-    translator = LlamaCppTranslator(
-        ServerSettings(static_root=tmp_path),
+def test_chat_request_supports_remote_provider_authentication(tmp_path: Path) -> None:
+    settings = ServerSettings(
+        static_root=tmp_path,
+        chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
+        chat_model="remote-model",
+        api_key=SecretStr("secret"),
+        extra_headers={"X-Provider-Feature": "enabled"},
+    )
+    opener = FakeUrlOpen(
+        FakeResponse({"choices": [{"message": {"role": "assistant", "content": "Done."}}]})
+    )
+    translator = OpenAICompatibleTranslator(settings, urlopen=opener)
+
+    assert translator.translate(translation_request()) == "Done."
+    upstream_request, _timeout = opener.requests[0]
+    assert upstream_request.full_url == "https://provider.example/chat/completions"
+    assert upstream_request.get_header("Authorization") == "Bearer secret"
+    assert upstream_request.get_header("X-provider-feature") == "enabled"
+
+
+def test_chat_client_rejects_invalid_response(tmp_path: Path) -> None:
+    translator = OpenAICompatibleTranslator(
+        ServerSettings(
+            static_root=tmp_path,
+            chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
+            chat_model="model",
+        ),
         urlopen=FakeUrlOpen(FakeResponse({"choices": []})),
     )
     with pytest.raises(TranslationError, match="invalid Chat Completions"):
         translator.translate(translation_request())
 
 
-def test_llama_cpp_reports_connection_failure(tmp_path: Path) -> None:
+def test_chat_client_reports_connection_failure(tmp_path: Path) -> None:
     def unavailable(
         request: urllib.request.Request,
         *,
@@ -103,9 +138,23 @@ def test_llama_cpp_reports_connection_failure(tmp_path: Path) -> None:
         del request, timeout
         raise urllib.error.URLError("offline")
 
-    translator = LlamaCppTranslator(ServerSettings(static_root=tmp_path), urlopen=unavailable)
-    with pytest.raises(TranslationError, match="SSH tunnel"):
+    settings = ServerSettings(
+        static_root=tmp_path,
+        chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
+        chat_model="model",
+    )
+    translator = OpenAICompatibleTranslator(settings, urlopen=unavailable)
+    with pytest.raises(TranslationError, match="configured Chat Completions endpoint"):
         translator.translate(translation_request())
+
+
+def test_unconfigured_translator_returns_service_unavailable(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="URL and model"):
+        OpenAICompatibleTranslator(ServerSettings(static_root=tmp_path))
+
+    with pytest.raises(TranslationError) as error_info:
+        UnconfiguredTranslator().translate(translation_request())
+    assert error_info.value.status == 503
 
 
 def test_translation_cache_evicts_oldest_item() -> None:

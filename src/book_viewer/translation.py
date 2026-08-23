@@ -1,4 +1,4 @@
-"""Translation backend abstraction and llama.cpp Chat Completions client."""
+"""Translation backend abstraction and OpenAI-compatible Chat Completions client."""
 
 from __future__ import annotations
 
@@ -75,8 +75,19 @@ class TranslationCache:
             self._values[key] = value
 
 
-class LlamaCppTranslator:
-    """OpenAI-compatible client for a local llama.cpp translation endpoint."""
+class UnconfiguredTranslator:
+    """Explain that live translation needs an explicitly configured backend."""
+
+    def translate(self, request: TranslationRequest) -> str:
+        del request
+        raise TranslationError(
+            "Live translation is not configured. Set LLM_CHAT_COMPLETIONS_URL and LLM_MODEL.",
+            HTTPStatus.SERVICE_UNAVAILABLE,
+        )
+
+
+class OpenAICompatibleTranslator:
+    """Provider-neutral client for an OpenAI-compatible Chat Completions endpoint."""
 
     def __init__(
         self,
@@ -84,15 +95,21 @@ class LlamaCppTranslator:
         *,
         urlopen: UrlOpen | None = None,
     ) -> None:
+        endpoint = settings.chat_completions_endpoint
+        model = settings.chat_model
+        if endpoint is None or model is None:
+            raise ValueError("A Chat Completions URL and model are required")
         self._settings = settings
+        self._endpoint = endpoint
+        self._model = model
         self._urlopen = urlopen or cast(UrlOpen, urllib.request.urlopen)
 
     def translate(self, request: TranslationRequest) -> str:
         chat_request = self._create_chat_request(request)
         upstream_request = urllib.request.Request(
-            self._settings.chat_completions_endpoint,
+            self._endpoint,
             data=chat_request.model_dump_json().encode(),
-            headers={"Content-Type": "application/json"},
+            headers=self._settings.request_headers(),
             method="POST",
         )
         try:
@@ -107,17 +124,16 @@ class LlamaCppTranslator:
             raise self._http_error(error) from error
         except (urllib.error.URLError, TimeoutError) as error:
             raise TranslationError(
-                "The viewer server could not reach llama.cpp at the configured local endpoint. "
-                "Check the SSH tunnel."
+                "The viewer server could not reach the configured Chat Completions endpoint."
             ) from error
         except (ValidationError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise TranslationError(
-                "The llama.cpp server returned an invalid Chat Completions response."
+                "The translation service returned an invalid Chat Completions response."
             ) from error
 
         translation = parsed.choices[0].message.content.strip()
         if not translation:
-            raise TranslationError("The llama.cpp server returned no translation text.")
+            raise TranslationError("The translation service returned no translation text.")
         return translation
 
     def _create_chat_request(self, request: TranslationRequest) -> ChatCompletionRequest:
@@ -138,15 +154,17 @@ class LlamaCppTranslator:
             f"commentary. Surrounding context: {context}"
         )
         return ChatCompletionRequest(
-            model=self._settings.translation_model,
+            model=self._model,
             messages=[
                 ChatMessage(role="system", content=instructions),
                 ChatMessage(role="user", content=request.sentence),
             ],
+            temperature=self._settings.temperature,
+            max_tokens=self._settings.max_tokens,
         )
 
     def _http_error(self, error: urllib.error.HTTPError) -> TranslationError:
-        fallback = "The llama.cpp server rejected the translation request."
+        fallback = "The translation service rejected the Chat Completions request."
         try:
             parsed = UpstreamErrorResponse.model_validate_json(error.read())
             message = parsed.error.message

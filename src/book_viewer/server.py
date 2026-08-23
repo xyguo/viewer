@@ -13,7 +13,13 @@ from pydantic import BaseModel, ValidationError
 
 from .models import ErrorResponse, TranslationRequest, TranslationResponse
 from .settings import ServerSettings
-from .translation import LlamaCppTranslator, TranslationCache, TranslationError, Translator
+from .translation import (
+    OpenAICompatibleTranslator,
+    TranslationCache,
+    TranslationError,
+    Translator,
+    UnconfiguredTranslator,
+)
 
 MAX_REQUEST_BYTES = 64 * 1024
 
@@ -34,7 +40,12 @@ class BookViewerHTTPServer(ThreadingHTTPServer):
         if not static_root.is_dir():
             raise FileNotFoundError(f"Viewer static root does not exist: {static_root}")
         self.settings = settings
-        self.translator = translator or LlamaCppTranslator(settings)
+        if translator is not None:
+            self.translator = translator
+        elif settings.translation_backend_configured:
+            self.translator = OpenAICompatibleTranslator(settings)
+        else:
+            self.translator = UnconfiguredTranslator()
         self.translation_cache = TranslationCache(settings.translation_cache_items)
         handler = functools.partial(ReaderHandler, directory=str(static_root))
         super().__init__((settings.host, settings.port), handler)
@@ -103,8 +114,7 @@ class ReaderHandler(SimpleHTTPRequestHandler):
         settings = self.viewer_server.settings
         cache_material = "\n".join(
             (
-                settings.chat_completions_endpoint,
-                settings.translation_model,
+                settings.translation_backend_identity,
                 request.model_dump_json(),
             )
         )

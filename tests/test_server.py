@@ -34,7 +34,7 @@ class FailingTranslator:
 @contextmanager
 def running_server(
     tmp_path: Path,
-    translator: FakeTranslator | FailingTranslator,
+    translator: FakeTranslator | FailingTranslator | None,
 ) -> Generator[tuple[str, int]]:
     (tmp_path / "index.html").write_text("<h1>Reader</h1>", encoding="utf-8")
     settings = ServerSettings(host="127.0.0.1", port=0, static_root=tmp_path)
@@ -105,6 +105,13 @@ def test_server_returns_safe_backend_error(tmp_path: Path) -> None:
         status, payload = post_json(host, port, "/api/translate", valid_payload())
     assert status == 502
     assert payload == {"error": "Backend unavailable."}
+
+
+def test_server_reports_unconfigured_live_translation(tmp_path: Path) -> None:
+    with running_server(tmp_path, None) as (host, port):
+        status, payload = post_json(host, port, "/api/translate", valid_payload())
+    assert status == 503
+    assert "LLM_CHAT_COMPLETIONS_URL" in str(payload["error"])
 
 
 def test_server_serves_static_files_with_security_headers(tmp_path: Path) -> None:

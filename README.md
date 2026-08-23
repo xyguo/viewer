@@ -48,31 +48,58 @@ The reader supports synchronized scrolling, sentence highlighting, counterpart p
 
 ## Use live translation
 
-Live mode needs the local server because browsers must not call the translation backend directly. Start the SSH tunnel that maps the remote llama.cpp service to local port `8080`, then run:
+Live mode needs the local server because browsers must not receive provider credentials or call the translation service directly. The only backend contract is an OpenAI-compatible Chat Completions API.
+
+Copy the example configuration and set the complete endpoint URL and model identifier supplied by your provider:
+
+```sh
+cp .env.example .env
+```
+
+`.env` is loaded automatically and ignored by Git. Then run:
 
 ```sh
 UV_CACHE_DIR=.uv-cache uv run book-viewer-serve
 ```
 
-Open `http://127.0.0.1:8000`. The default backend is:
-
-- endpoint: `http://127.0.0.1:8080/v1/chat/completions`
-- model: `tencent-hy-mt`
-- authentication: none
+Open `http://127.0.0.1:8000`. There is deliberately no default backend. Without `LLM_CHAT_COMPLETIONS_URL` and `LLM_MODEL`, the static reader still works and live translation returns a configuration error.
 
 The clicked source sentence is the only user message. Up to two neighboring sentences on each side are included in the system message as translation context.
 
-Runtime settings can be overridden with environment variables:
+For the current llama.cpp SSH tunnel, use:
 
 ```sh
 VIEWER_HOST=127.0.0.1 \
 VIEWER_PORT=8000 \
-LLAMA_CPP_BASE_URL=http://127.0.0.1:8080/v1 \
-TRANSLATION_MODEL=tencent-hy-mt \
+LLM_CHAT_COMPLETIONS_URL=http://127.0.0.1:8080/v1/chat/completions \
+LLM_MODEL=tencent-hy-mt \
 TRANSLATION_TIMEOUT_SECONDS=90 \
 UV_CACHE_DIR=.uv-cache \
 uv run book-viewer-serve
 ```
+
+For a hosted provider using standard Bearer authentication, configure:
+
+```sh
+LLM_CHAT_COMPLETIONS_URL=https://provider.example/v1/chat/completions \
+LLM_MODEL=provider-model-name \
+LLM_API_KEY=replace-me \
+UV_CACHE_DIR=.uv-cache \
+uv run book-viewer-serve
+```
+
+Provider configuration:
+
+- `LLM_CHAT_COMPLETIONS_URL`: complete Chat Completions endpoint; required with `LLM_MODEL`.
+- `LLM_MODEL`: provider model identifier; required with the endpoint.
+- `LLM_API_KEY`: optional secret, sent only by the local server.
+- `LLM_API_KEY_HEADER`: authentication header name, defaulting to `Authorization`.
+- `LLM_API_KEY_SCHEME`: authentication prefix, defaulting to `Bearer`; set it to an empty value for an unprefixed key.
+- `LLM_EXTRA_HEADERS`: optional JSON object for provider-specific headers.
+- `LLM_TEMPERATURE` and `LLM_MAX_TOKENS`: optional generation controls.
+- `TRANSLATION_TIMEOUT_SECONDS`: upstream request timeout.
+
+For example, a service expecting `api-key: <key>` can use `LLM_API_KEY_HEADER=api-key` and an empty `LLM_API_KEY_SCHEME`. No provider SDK is required.
 
 ## Add another book
 
