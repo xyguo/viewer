@@ -81,7 +81,13 @@ def build_catalog(
         if not manifest.output_path(local_book.manifest_path).is_file():
             continue
         browser_path = PurePosixPath("books", manifest.slug, manifest.data_file).as_posix()
-        entries[manifest.slug] = CatalogEntry(title=manifest.title, data_file=browser_path)
+        entries[manifest.slug] = CatalogEntry(
+            title=manifest.title,
+            description=manifest.description,
+            source_label=manifest.source.label,
+            target_label=manifest.target.label,
+            data_file=browser_path,
+        )
 
     if not entries:
         raise ValueError("No built external books were found for the browser catalog.")

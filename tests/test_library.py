@@ -90,21 +90,32 @@ def test_local_book_requires_matching_directory_and_markdown(tmp_path: Path) -> 
 def test_build_catalog_includes_only_built_books(tmp_path: Path) -> None:
     books_dir = tmp_path / "books"
     write_external_book(books_dir, "available-book")
+    write_external_book(books_dir, "second-book")
     write_external_book(books_dir, "unbuilt-book", built=False)
 
     result = build_catalog(books_dir, default_book="available-book")
     output = result.output_path.read_text(encoding="utf-8")
     raw_catalog = output.removeprefix("window.BOOK_VIEWER_CATALOG = ").removesuffix(";\n")
     catalog = json.loads(raw_catalog)
-    assert result.book_count == 1
+    assert result.book_count == 2
     assert catalog == {
         "schemaVersion": 1,
         "defaultBook": "available-book",
         "books": {
             "available-book": {
                 "title": "Title available-book",
+                "description": "Description.",
+                "sourceLabel": "日本語",
+                "targetLabel": "English",
                 "dataFile": "books/available-book/document-data.js",
-            }
+            },
+            "second-book": {
+                "title": "Title second-book",
+                "description": "Description.",
+                "sourceLabel": "日本語",
+                "targetLabel": "English",
+                "dataFile": "books/second-book/document-data.js",
+            },
         },
     }
 

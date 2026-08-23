@@ -36,7 +36,9 @@ def test_run_build_uses_selected_manifest(
     assert cli.run_build(["--manifest", str(manifest_path), "--default-book", "example-book"]) == 0
     assert captured == [manifest_path]
     assert catalog_calls == [(manifest_path.parent.parent, "example-book")]
-    assert "7 aligned segments" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "7 aligned segments" in output
+    assert "1 available book." in output
 
 
 def test_build_command_requires_manifest() -> None:

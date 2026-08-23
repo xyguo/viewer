@@ -33,8 +33,12 @@ def run_build(argv: Sequence[str] | None = None) -> int:
         manifest_path.resolve().parent.parent,
         default_book=args.default_book,
     )
+    book_label = "book" if catalog_result.book_count == 1 else "books"
     print(f"Built {result.output_path} with {result.segment_count} aligned segments.")
-    print(f"Built {catalog_result.output_path} with {catalog_result.book_count} available books.")
+    print(
+        f"Built {catalog_result.output_path} with "
+        f"{catalog_result.book_count} available {book_label}."
+    )
     return 0
 
 

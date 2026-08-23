@@ -176,6 +176,9 @@ class CatalogEntry(StrictModel):
     )
 
     title: str = Field(min_length=1, max_length=300)
+    description: str | None = Field(default=None, min_length=1, max_length=500)
+    source_label: str | None = Field(default=None, min_length=1, max_length=80)
+    target_label: str | None = Field(default=None, min_length=1, max_length=80)
     data_file: str = Field(min_length=1)
 
 
