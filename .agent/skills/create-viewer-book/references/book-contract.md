@@ -137,6 +137,20 @@ $$
 
 Keep a display equation as its own block between adjacent prose segments. The builder validates `\tag` values and order, but the transcription audit must also catch unnumbered formulas that were dropped or changed.
 
+### Code blocks
+
+Preserve consecutive source code as fenced Markdown instead of wrapping individual lines in sentence segments. Add a language label so the existing Pandoc build step can produce static syntax tokens without a browser dependency:
+
+````markdown
+```c
+int main(void) {
+  return 0;
+}
+```
+````
+
+The viewer provides lightweight syntax colors and line numbers for C (`c`), C++ (`cpp`), Python (`python`), shell (`bash` or `zsh`), Rust (`rust`), Haskell (`haskell`), Go (`go`), assembly (`asm`, `fasm`, or `nasm`), JavaScript (`javascript` or `js`), TypeScript (`typescript` or `ts`), Lean (`lean` or `lean4`), OCaml (`ocaml` or `ml`), Scala (`scala`), Java (`java`), and HTML (`html`). Unlabeled fenced blocks still render as consecutive numbered code, but without syntax colors.
+
 ### Figures and other assets
 
 Store assets under the book directory and reference them with the same path and order in both editions:
