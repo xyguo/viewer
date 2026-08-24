@@ -82,6 +82,40 @@ def valid_payload() -> dict[str, object]:
     }
 
 
+def write_built_book(books_root: Path, slug: str) -> None:
+    book_root = books_root / slug
+    book_root.mkdir(parents=True)
+    (book_root / "source.md").write_text("Source.", encoding="utf-8")
+    (book_root / "target.md").write_text("Target.", encoding="utf-8")
+    (book_root / "document-data.js").write_text("window.DATA = {};\n", encoding="utf-8")
+    (book_root / "book.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "slug": slug,
+                "title": f"Title {slug}",
+                "reader_title": f"Reader {slug}",
+                "description": "A sample.",
+                "source": {
+                    "language": "Japanese",
+                    "label": "Japanese",
+                    "html_lang": "ja",
+                    "markdown": "source.md",
+                    "html_id_prefix": "source",
+                },
+                "target": {
+                    "language": "English",
+                    "label": "English",
+                    "html_lang": "en",
+                    "markdown": "target.md",
+                    "html_id_prefix": "target",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_server_translates_and_caches_identical_requests(tmp_path: Path) -> None:
     translator = FakeTranslator()
     with running_server(tmp_path, translator) as (host, port):
@@ -163,9 +197,10 @@ def test_server_serves_external_books_from_a_separate_root(tmp_path: Path) -> No
     static_root = tmp_path / "static"
     books_root = tmp_path / "library"
     static_root.mkdir()
-    books_root.mkdir()
+    example_root = books_root / "example"
+    example_root.mkdir(parents=True)
     (static_root / "index.html").write_text("Viewer", encoding="utf-8")
-    (books_root / "catalog.js").write_text("Catalog", encoding="utf-8")
+    (example_root / "catalog.js").write_text("Catalog", encoding="utf-8")
     (tmp_path / "secret.txt").write_text("Secret", encoding="utf-8")
     settings = ServerSettings(
         host="127.0.0.1",
@@ -203,6 +238,7 @@ def test_server_falls_back_to_tracked_example_catalog(tmp_path: Path) -> None:
     example_dir = books_root / "example"
     example_dir.mkdir(parents=True)
     (static_root / "index.html").write_text("Viewer", encoding="utf-8")
+    (books_root / "catalog.js").write_text("Stale root catalog", encoding="utf-8")
     (example_dir / "catalog.js").write_text("Example catalog", encoding="utf-8")
     settings = ServerSettings(
         host="127.0.0.1",
@@ -229,42 +265,12 @@ def test_server_falls_back_to_tracked_example_catalog(tmp_path: Path) -> None:
     assert body == "Example catalog"
 
 
-def test_server_discovers_built_books_without_generated_root_catalog(tmp_path: Path) -> None:
+def test_server_refreshes_catalog_without_restart_or_generated_root_file(tmp_path: Path) -> None:
     static_root = tmp_path / "static"
     books_root = tmp_path / "books"
-    book_root = books_root / "sample-book"
     static_root.mkdir()
-    book_root.mkdir(parents=True)
     (static_root / "index.html").write_text("Viewer", encoding="utf-8")
-    (book_root / "source.md").write_text("Source.", encoding="utf-8")
-    (book_root / "target.md").write_text("Target.", encoding="utf-8")
-    (book_root / "document-data.js").write_text("window.DATA = {};\n", encoding="utf-8")
-    (book_root / "book.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 2,
-                "slug": "sample-book",
-                "title": "Sample Book",
-                "reader_title": "Sample Reader",
-                "description": "A sample.",
-                "source": {
-                    "language": "Japanese",
-                    "label": "Japanese",
-                    "html_lang": "ja",
-                    "markdown": "source.md",
-                    "html_id_prefix": "source",
-                },
-                "target": {
-                    "language": "English",
-                    "label": "English",
-                    "html_lang": "en",
-                    "markdown": "target.md",
-                    "html_id_prefix": "target",
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    write_built_book(books_root, "sample-book")
     settings = ServerSettings(
         host="127.0.0.1",
         port=0,
@@ -278,16 +284,25 @@ def test_server_discovers_built_books_without_generated_root_catalog(tmp_path: P
     try:
         connection = http.client.HTTPConnection(str(host), int(port), timeout=2)
         connection.request("GET", "/books/catalog.js")
-        response = connection.getresponse()
-        body = response.read().decode()
+        first_response = connection.getresponse()
+        first_body = first_response.read().decode()
+
+        write_built_book(books_root, "new-book")
+        connection.request("GET", "/books/catalog.js")
+        refreshed_response = connection.getresponse()
+        refreshed_body = refreshed_response.read().decode()
         connection.close()
     finally:
         server.shutdown()
         thread.join(timeout=2)
         server.server_close()
 
-    assert response.status == 200
-    assert '"sample-book"' in body
+    assert first_response.status == 200
+    assert '"sample-book"' in first_body
+    assert '"new-book"' not in first_body
+    assert refreshed_response.status == 200
+    assert '"sample-book"' in refreshed_body
+    assert '"new-book"' in refreshed_body
     assert not (books_root / "catalog.js").exists()
 
 

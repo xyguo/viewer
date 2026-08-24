@@ -25,7 +25,7 @@ Use `.agent/skills/create-viewer-book/` whenever work creates, translates, rebui
 
 Treat `src/book_viewer/models.py`, `schemas/book.schema.json`, and `src/book_viewer/builder.py` as the application authority. `book.json` must declare the supported `schema_version`. Generated catalogs, chapter indexes, and chapter payloads carry that version, and the viewer rejects incompatible data.
 
-Generated `document-data.js`, `document-data-chunks/`, per-book `catalog.js`, and the library-level `books/catalog.js` are build outputs. Correct source Markdown, target Markdown, assets, manifests, or builder code and regenerate them instead of editing generated JavaScript.
+Generated `document-data.js`, `document-data-chunks/`, per-book `catalog.js`, and the library-level `books/catalog.js` are build outputs. Correct source Markdown, target Markdown, assets, manifests, or builder code and regenerate them instead of editing generated JavaScript. The local server discovers built books and serializes its catalog in memory on every `/books/catalog.js` request; the generated catalog files remain the static and portable fallbacks.
 
 When deliberately changing `BookManifest`, regenerate the tracked schema:
 

@@ -47,7 +47,6 @@ class BookViewerHTTPServer(ThreadingHTTPServer):
         self.settings = settings
         self.books_root = settings.books_root.resolve()
         catalog = create_catalog(self.books_root)
-        self.catalog_javascript = None if catalog is None else serialize_catalog(catalog).encode()
         self.catalog_book_count = 0 if catalog is None else len(catalog.books)
         if translator is not None:
             self.translator = translator
@@ -72,27 +71,31 @@ class ReaderHandler(SimpleHTTPRequestHandler):
     def translate_path(self, path: str) -> str:
         request_path = urllib.parse.urlsplit(path).path
         if request_path == "/books" or request_path.startswith("/books/"):
-            relative_path = request_path.removeprefix("/books")
+            relative_path = (
+                "/example/catalog.js"
+                if request_path == "/books/catalog.js"
+                else request_path.removeprefix("/books")
+            )
             resolved_path = _resolve_static_path(self.viewer_server.books_root, relative_path)
-            if request_path == "/books/catalog.js" and not resolved_path.is_file():
-                resolved_path = _resolve_static_path(
-                    self.viewer_server.books_root,
-                    "/example/catalog.js",
-                )
             return str(resolved_path)
         return super().translate_path(path)
 
     def do_GET(self) -> None:
         request_path = urllib.parse.urlsplit(self.path).path
-        catalog = self.viewer_server.catalog_javascript
-        if request_path == "/books/catalog.js" and catalog is not None:
+        catalog = (
+            create_catalog(self.viewer_server.books_root)
+            if request_path == "/books/catalog.js"
+            else None
+        )
+        if catalog is not None:
+            catalog_javascript = serialize_catalog(catalog).encode()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/javascript; charset=utf-8")
-            self.send_header("Content-Length", str(len(catalog)))
+            self.send_header("Content-Length", str(len(catalog_javascript)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
-            self.wfile.write(catalog)
+            self.wfile.write(catalog_javascript)
             return
         super().do_GET()
 
