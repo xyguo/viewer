@@ -4,7 +4,7 @@
   "slug": "example",
   "title": "Balog-Szemerédi-Gowers Theorem",
   "reader_title": "BSG Theorem Reader",
-  "description": "A four-page Japanese mathematical article with an aligned English translation.",
+  "description": "An exposition of the Balog-Szemerédi-Gowers theorem in additive combinatorics.",
   "source": {
     "language": "Japanese",
     "label": "日本語",

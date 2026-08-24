@@ -44,7 +44,7 @@ Use the schema version and constraints currently declared by `schemas/book.schem
   "slug": "example-book",
   "title": "Example Book",
   "reader_title": "Example Book Reader",
-  "description": "A faithful sentence-aligned source and translation.",
+  "description": "A concise introduction to the book's subject matter.",
   "source": {
     "language": "Japanese",
     "label": "日本語",
@@ -71,6 +71,8 @@ Use the schema version and constraints currently declared by `schemas/book.schem
 ```
 
 Use a lowercase hyphenated slug. Use valid BCP 47 values for `html_lang`, human-readable labels for controls, and distinct lowercase HTML ID prefixes. Add only MathJax packages and macros the document needs.
+
+Write `description` as a short account of the book's subject matter. Do not repeat the source and target languages, sentence alignment, viewer format, file provenance, or other presentation details already shown elsewhere on the library card.
 
 ## Metadata compatibility
 
