@@ -53,6 +53,9 @@
     chapterRequestId: 0,
     currentChapterId: null,
     currentTocId: null,
+    resumePosition: null,
+    readingPositionTimer: null,
+    pendingReadingSegmentId: null,
     mathReady: false,
     mathQueue: Promise.resolve(),
     chunkPromises: new Map(),
@@ -99,9 +102,10 @@
 
     const hashMatch = location.hash.match(/^#seg=(.+)$/);
     const requestedSegment = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
+    state.resumePosition = requestedSegment ? null : savedReadingPosition();
     const initialChapterId = requestedSegment
       ? state.segmentChapters.get(requestedSegment)
-      : data.initialChapterId;
+      : state.resumePosition?.chapterId || data.initialChapterId;
     if (!initialChapterId) {
       showLoadError("The selected chapter could not be found.");
       return;
@@ -230,6 +234,11 @@
       state.mathReady = true;
       void typesetCurrentChapter(state.chapterRequestId);
     });
+
+    window.addEventListener("pagehide", flushReadingPosition);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushReadingPosition();
+    });
   }
 
   function chunkKey(chapterId, language) {
@@ -290,6 +299,12 @@
       return;
     }
 
+    const resumePosition = state.resumePosition?.chapterId === chapterId
+      ? state.resumePosition
+      : null;
+    state.resumePosition = null;
+    const destinationSegmentId = segmentId || resumePosition?.segmentId || chapter.segmentIds[0];
+
     const requestId = ++state.chapterRequestId;
     shell.classList.add("is-loading-chapter");
     shell.setAttribute("aria-busy", "true");
@@ -317,7 +332,7 @@
       sourceScroll.scrollTop = 0;
       targetScroll.scrollTop = 0;
       updateChapterControls();
-      updateCurrentTocForSegment(segmentId || chapter.segmentIds[0]);
+      updateCurrentTocForSegment(destinationSegmentId);
       shell.classList.remove("is-loading-chapter");
       shell.removeAttribute("aria-busy");
       updateModeCopy();
@@ -325,8 +340,11 @@
       await typesetCurrentChapter(requestId);
       if (requestId !== state.chapterRequestId) return;
       await nextFrame();
-      navigateWithinChapter(segmentId || chapter.segmentIds[0], false, Boolean(segmentId));
+      if (!restoreReadingPosition(resumePosition)) {
+        navigateWithinChapter(destinationSegmentId, false, Boolean(segmentId));
+      }
       updateVisibleProgress();
+      scheduleReadingPosition(destinationSegmentId);
       prefetchAdjacentChapters(state.chapterIndexes.get(chapter.id));
     } catch (error) {
       if (requestId !== state.chapterRequestId) return;
@@ -441,6 +459,7 @@
     state.segmentMaps.source.get(id)?.classList.add("is-active");
     state.segmentMaps.target.get(id)?.classList.add("is-active");
     history.replaceState(null, "", `#seg=${encodeURIComponent(id)}`);
+    scheduleReadingPosition(id);
   }
 
   function setMode(mode) {
@@ -530,6 +549,7 @@
       hidePopover(false);
       const anchor = firstVisibleSegment(language);
       if (language === "source" && anchor) updateCurrentTocForSegment(anchor.dataset.seg);
+      scheduleReadingPosition(anchor?.dataset.seg || null);
 
       if (state.mode !== "offline"
         || state.view !== "both"
@@ -560,6 +580,77 @@
       }
     }
     return firstVisible;
+  }
+
+  function savedReadingPosition() {
+    const saved = window.BookViewerPreferences.read(data.slug);
+    const chapterId = typeof saved.chapterId === "string" ? saved.chapterId : null;
+    if (!chapterId || !state.chaptersById.has(chapterId)) return null;
+
+    const segmentId = typeof saved.segmentId === "string"
+      && state.segmentChapters.get(saved.segmentId) === chapterId
+      ? saved.segmentId
+      : state.chaptersById.get(chapterId).segmentIds[0];
+    const sourceScrollTop = Number.isFinite(saved.sourceScrollTop)
+      ? Math.max(0, saved.sourceScrollTop)
+      : null;
+    const targetScrollTop = Number.isFinite(saved.targetScrollTop)
+      ? Math.max(0, saved.targetScrollTop)
+      : null;
+
+    return { chapterId, segmentId, sourceScrollTop, targetScrollTop };
+  }
+
+  function restoreReadingPosition(position) {
+    if (!position) return false;
+    const hasSourcePosition = Number.isFinite(position.sourceScrollTop);
+    const hasTargetPosition = Number.isFinite(position.targetScrollTop);
+    if (!hasSourcePosition && !hasTargetPosition) return false;
+
+    state.syncLock = true;
+    if (hasSourcePosition) sourceScroll.scrollTop = position.sourceScrollTop;
+    if (hasTargetPosition) targetScroll.scrollTop = position.targetScrollTop;
+    window.setTimeout(() => {
+      state.syncLock = false;
+    }, 50);
+    return true;
+  }
+
+  function scheduleReadingPosition(segmentId) {
+    if (segmentId) state.pendingReadingSegmentId = segmentId;
+    if (state.readingPositionTimer !== null) {
+      window.clearTimeout(state.readingPositionTimer);
+    }
+    state.readingPositionTimer = window.setTimeout(flushReadingPosition, 250);
+  }
+
+  function flushReadingPosition() {
+    if (state.readingPositionTimer !== null) {
+      window.clearTimeout(state.readingPositionTimer);
+      state.readingPositionTimer = null;
+    }
+    if (!data || !state.currentChapterId) return;
+
+    const chapter = state.chaptersById.get(state.currentChapterId);
+    let segmentId = state.pendingReadingSegmentId;
+    if (state.segmentChapters.get(segmentId) !== state.currentChapterId) {
+      const visibleLanguage = state.view === "target" ? "target" : "source";
+      segmentId = firstVisibleSegment(visibleLanguage)?.dataset.seg || chapter.segmentIds[0];
+    }
+    state.pendingReadingSegmentId = null;
+    window.BookViewerPreferences.savePosition(data.slug, {
+      chapterId: state.currentChapterId,
+      segmentId,
+      progressPercent: readingProgressPercent(segmentId),
+      sourceScrollTop: sourceScroll.scrollTop,
+      targetScrollTop: targetScroll.scrollTop,
+    });
+  }
+
+  function readingProgressPercent(segmentId) {
+    const segmentIndex = state.segmentIndexes.get(segmentId);
+    if (segmentIndex === undefined || data.segmentCount <= 1) return 0;
+    return Math.round((segmentIndex / (data.segmentCount - 1)) * 100);
   }
 
   function syncFrom(language, anchor) {
@@ -866,7 +957,7 @@
     try {
       window.localStorage.setItem(key, value);
     } catch {
-      // Translation still works when browser storage is unavailable or full.
+      // The viewer remains usable when browser storage is unavailable or full.
     }
   }
 

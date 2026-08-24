@@ -39,6 +39,10 @@ Create a `books/` folder in the repository and put the PDF you want to read in i
 
 Except for the small tracked `books/example/` package, book source files, translations, metadata, generated browser data, and assets under `books/` remain local and are intentionally excluded from Git.
 
+When using `book-viewer-serve`, the server discovers built books and creates the library catalog in memory for every catalog request. Refresh the library page after adding or rebuilding a book; restarting the server is unnecessary. The generated `books/catalog.js` file remains available for opening or hosting the static viewer without the Python server.
+
+The reader stores each book's last-opened time and reading position in the browser's local storage. Recently opened books appear first in the library, and reopening a book resumes at its saved position. This history stays in the current browser profile and is not synchronized between browsers or devices.
+
 ## Live translation
 
 Live translation requires an OpenAI-compatible Chat Completions service. Copy the example configuration:

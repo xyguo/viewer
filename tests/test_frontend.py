@@ -105,6 +105,42 @@ def test_reader_loads_chapters_and_avoids_linear_scroll_scans() -> None:
     assert "originSegments.find" not in app
 
 
+def test_reader_persists_library_recency_and_reading_position() -> None:
+    viewer_root = Path(__file__).resolve().parents[1]
+    markup = load_markup(viewer_root)
+    preferences = (viewer_root / "preferences.js").read_text(encoding="utf-8")
+    bootstrap = (viewer_root / "bootstrap.js").read_text(encoding="utf-8")
+    app = (viewer_root / "app.js").read_text(encoding="utf-8")
+    binary_spec = (viewer_root / "book-viewer.spec").read_text(encoding="utf-8")
+    scripts = [
+        element.attributes.get("src")
+        for element in markup.elements
+        if element.tag == "script" and element.attributes.get("src")
+    ]
+
+    assert scripts[-3:] == ["preferences.js", "app.js", "bootstrap.js"]
+    assert 'const STORAGE_PREFIX = "book-viewer-reading:v1:";' in preferences
+    assert "localStorage.getItem(storageKey(slug))" in preferences
+    assert "localStorage.setItem(storageKey(slug)" in preferences
+    assert "lastOpenedAt: Date.now()" in preferences
+    assert "function progressPercent(slug)" in preferences
+    assert "BookViewerPreferences.lastOpenedAt(slug)" in bootstrap
+    assert "BookViewerPreferences.progressPercent(slug)" in bootstrap
+    assert "rightOpenedAt - leftOpenedAt" in bootstrap
+    assert "BookViewerPreferences.touch(requestedSlug)" in bootstrap
+    assert "state.resumePosition = requestedSegment ? null : savedReadingPosition();" in app
+    assert "sourceScrollTop: sourceScroll.scrollTop" in app
+    assert "targetScrollTop: targetScroll.scrollTop" in app
+    assert "progressPercent: readingProgressPercent(segmentId)" in app
+    assert 'window.addEventListener("pagehide", flushReadingPosition)' in app
+    assert '(str(project_root / "preferences.js"), ".")' in binary_spec
+
+    styles = (viewer_root / "styles.css").read_text(encoding="utf-8")
+    assert "progress.textContent = `${progressPercent}% read`" in bootstrap
+    assert ".book-card-footer" in styles
+    assert ".book-progress" in styles
+
+
 def test_reader_styles_numbered_highlighted_code_blocks() -> None:
     viewer_root = Path(__file__).resolve().parents[1]
     styles = (viewer_root / "styles.css").read_text(encoding="utf-8")

@@ -75,7 +75,14 @@
     const catalog = window.BOOK_VIEWER_CATALOG;
     const entries = Object.entries(catalog?.books || {})
       .filter(([, entry]) => entry?.title && entry?.dataFile)
-      .sort(([leftSlug], [rightSlug]) => {
+      .map(([slug, entry]) => [
+        slug,
+        entry,
+        window.BookViewerPreferences.lastOpenedAt(slug),
+        window.BookViewerPreferences.progressPercent(slug),
+      ])
+      .sort(([leftSlug, , leftOpenedAt], [rightSlug, , rightOpenedAt]) => {
+        if (leftOpenedAt !== rightOpenedAt) return rightOpenedAt - leftOpenedAt;
         if (leftSlug === catalog?.defaultBook) return -1;
         if (rightSlug === catalog?.defaultBook) return 1;
         return leftSlug.localeCompare(rightSlug);
@@ -97,16 +104,16 @@
       catalogEmptyMessage.textContent = "Rebuild the local catalog after adding or updating external books.";
     }
 
-    entries.forEach(([slug, entry], index) => {
-      bookList.append(createBookCard(slug, entry, index));
+    entries.forEach(([slug, entry, , progressPercent], index) => {
+      bookList.append(createBookCard(slug, entry, index, progressPercent));
     });
   }
 
-  function createBookCard(slug, entry, index) {
+  function createBookCard(slug, entry, index, progressPercent) {
     const link = document.createElement("a");
     link.className = "book-card";
     link.href = `?book=${encodeURIComponent(slug)}`;
-    link.setAttribute("aria-label", `Open ${entry.title}`);
+    link.setAttribute("aria-label", `Open ${entry.title}, ${progressPercent}% read`);
 
     const topline = document.createElement("span");
     topline.className = "book-card-topline";
@@ -133,7 +140,15 @@
     action.className = "book-action";
     action.textContent = "Open reader →";
 
-    link.append(topline, title, description, action);
+    const progress = document.createElement("span");
+    progress.className = "book-progress";
+    progress.textContent = `${progressPercent}% read`;
+
+    const footer = document.createElement("span");
+    footer.className = "book-card-footer";
+    footer.append(action, progress);
+
+    link.append(topline, title, description, footer);
     return link;
   }
 
@@ -180,6 +195,7 @@
         fail(`The data for '${requestedSlug}' is incompatible with this viewer version. Rebuild it.`);
         return;
       }
+      window.BookViewerPreferences.touch(requestedSlug);
       configureMathJax(documentData);
       window.BookViewer.initialize(documentData);
       loadMathJax();
