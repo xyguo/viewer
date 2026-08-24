@@ -1,0 +1,1 @@
+window.BOOK_VIEWER_CATALOG = {"schemaVersion":2,"defaultBook":"example","books":{"example":{"title":"Balog-Szemerédi-Gowers Theorem","description":"A four-page Japanese mathematical article with an aligned English translation.","sourceLabel":"日本語","targetLabel":"English","dataFile":"books/example/document-data.js"}}};

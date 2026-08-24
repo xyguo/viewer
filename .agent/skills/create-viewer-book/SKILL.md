@@ -27,4 +27,4 @@ Produce a complete external book package that the current viewer can build and r
 
 ## Completion report
 
-Report the book directory, source and target Markdown paths, aligned segment count, chapter count, validation results, and any source limitations that remain. Book data under `books/` is intentionally external and Git-ignored; preserve that policy unless the user explicitly changes it.
+Report the book directory, source and target Markdown paths, aligned segment count, chapter count, validation results, and any source limitations that remain. Ordinary book data under `books/` is intentionally external and Git-ignored. The canonical `books/example/` fixture is tracked; preserve this boundary unless the user explicitly changes it.

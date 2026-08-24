@@ -6,6 +6,8 @@
 .env
 /books/*
 !/books/.gitkeep
+!/books/example/
+!/books/example/**
 .coverage
 coverage.xml
 htmlcov/

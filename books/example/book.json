@@ -1,0 +1,32 @@
+{
+  "$schema": "../../schemas/book.schema.json",
+  "schema_version": 2,
+  "slug": "example",
+  "title": "Balog-Szemerédi-Gowers Theorem",
+  "reader_title": "BSG Theorem Reader",
+  "description": "A four-page Japanese mathematical article with an aligned English translation.",
+  "source": {
+    "language": "Japanese",
+    "label": "日本語",
+    "html_lang": "ja",
+    "markdown": "source.md",
+    "html_id_prefix": "source"
+  },
+  "target": {
+    "language": "English",
+    "label": "English",
+    "html_lang": "en",
+    "markdown": "target.md",
+    "html_id_prefix": "target"
+  },
+  "data_file": "document-data.js",
+  "asset_rewrites": {
+    "assets/": "books/example/assets/"
+  },
+  "mathjax": {
+    "packages": [
+      "ams"
+    ],
+    "macros": {}
+  }
+}

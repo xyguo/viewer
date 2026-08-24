@@ -2,7 +2,7 @@
 
 ## Scope
 
-Parallel Book Viewer is a lightweight static reader with a small typed Python server and build toolchain. Keep the browser application book-independent and keep book packages external under the ignored `books/` directory.
+Parallel Book Viewer is a lightweight static reader with a small typed Python server and build toolchain. Keep the browser application book-independent and keep ordinary book packages external under the ignored `books/` directory. The sole tracked exception is the canonical `books/example/` fixture.
 
 `README.md` is the concise user quick start. Put contributor workflow and repository architecture here. Put document ingestion, translation, alignment, manifest, and book verification instructions in `.agent/skills/create-viewer-book/`.
 
@@ -16,7 +16,7 @@ Parallel Book Viewer is a lightweight static reader with a small typed Python se
 - `scripts/build-binary.sh` and `book-viewer.spec`: standalone executable build.
 - `.agent/skills/create-viewer-book/`: canonical agent workflow for creating and updating book packages.
 - `docs/assets/`: tracked images used by repository documentation.
-- `books/`: ignored external library. Only `books/.gitkeep` is tracked.
+- `books/`: ignored external library. `books/.gitkeep` and the complete `books/example/` fixture are tracked.
 - `vendor/mathjax/`: ignored thin local MathJax installation.
 
 ## Book and metadata contracts
@@ -25,7 +25,7 @@ Use `.agent/skills/create-viewer-book/` whenever work creates, translates, rebui
 
 Treat `src/book_viewer/models.py`, `schemas/book.schema.json`, and `src/book_viewer/builder.py` as the application authority. `book.json` must declare the supported `schema_version`. Generated catalogs, chapter indexes, and chapter payloads carry that version, and the viewer rejects incompatible data.
 
-Generated `document-data.js`, `document-data-chunks/`, and `books/catalog.js` are build outputs. Correct source Markdown, target Markdown, assets, manifests, or builder code and regenerate them instead of editing generated JavaScript.
+Generated `document-data.js`, `document-data-chunks/`, per-book `catalog.js`, and the library-level `books/catalog.js` are build outputs. Correct source Markdown, target Markdown, assets, manifests, or builder code and regenerate them instead of editing generated JavaScript.
 
 When deliberately changing `BookManifest`, regenerate the tracked schema:
 
@@ -33,7 +33,7 @@ When deliberately changing `BookManifest`, regenerate the tracked schema:
 UV_CACHE_DIR=.uv-cache uv run --offline book-viewer-schema --output schemas/book.schema.json
 ```
 
-Keep book packages and installed MathJax out of version control. Validate all locally present manifests so application changes remain compatible with the current external library.
+Keep ordinary book packages and installed MathJax out of version control. The tracked `books/example/` package is the compatibility fixture and must contain its source PDF, aligned Markdown editions, assets, and generated browser metadata. Validate all locally present manifests so application changes remain compatible with the current external library.
 
 ## Development workflow
 

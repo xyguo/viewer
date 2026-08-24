@@ -20,6 +20,7 @@ books/<slug>/
 |-- book.json
 |-- source.md
 |-- target.md
+|-- catalog.js                       generated one-book catalog
 |-- assets/
 |   `-- figures/
 |       `-- <book-specific images>
@@ -30,7 +31,7 @@ books/<slug>/
     `-- ...
 ```
 
-`books/catalog.js` is also generated. Keep all of these book-specific files under `books/<slug>/`; the repository intentionally ignores `books/*`.
+The library-level `books/catalog.js` is also generated. Keep all book-specific files under `books/<slug>/`. Ordinary packages are ignored external data; `books/example/` is the sole tracked fixture and includes its source PDF and generated metadata.
 
 ## Manifest
 
@@ -154,6 +155,7 @@ The alt text may be translated, but the image path must be identical. Keep the v
 
 - `document-data.js`: book metadata, table of contents, chapter index, segment index, and MathJax configuration.
 - `document-data-chunks/*.js`: source and target HTML for lazily loaded chapters.
+- `catalog.js`: a portable one-entry catalog for opening the book without a library catalog.
 - `books/catalog.js`: catalog of all currently valid, built books.
 
 If generated data is wrong, fix `book.json`, Markdown, assets, or builder code as appropriate, then rebuild.

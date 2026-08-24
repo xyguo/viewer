@@ -30,7 +30,7 @@ The result is `dist/book-viewer`; book data remains external to the executable.
 
 Create a `books/` folder in the repository and put the PDF you want to read in it. Then point an AI agent at the repository and ask it to use the project skill at `.agent/skills/create-viewer-book` to convert the PDF into the format accepted by the viewer.
 
-Book source files, translations, metadata, generated browser data, and assets under `books/` remain local and are intentionally excluded from Git.
+Except for the small tracked `books/example/` package, book source files, translations, metadata, generated browser data, and assets under `books/` remain local and are intentionally excluded from Git.
 
 ## Live translation
 
