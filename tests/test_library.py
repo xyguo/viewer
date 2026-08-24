@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from book_viewer.library import (
+    build_book_catalog,
     build_catalog,
     load_local_book,
     manifest_schema_text,
@@ -121,6 +122,28 @@ def test_build_catalog_includes_only_built_books(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="has not been built"):
         build_catalog(books_dir, default_book="unbuilt-book")
+
+
+def test_build_book_catalog_contains_only_selected_book(tmp_path: Path) -> None:
+    books_dir = tmp_path / "books"
+    selected = write_external_book(books_dir, "selected-book")
+    write_external_book(books_dir, "private-book")
+
+    result = build_book_catalog(selected)
+    output = result.output_path.read_text(encoding="utf-8")
+    raw_catalog = output.removeprefix("window.BOOK_VIEWER_CATALOG = ").removesuffix(";\n")
+    catalog = json.loads(raw_catalog)
+
+    assert result.output_path == selected.parent / "catalog.js"
+    assert result.book_count == 1
+    assert catalog["defaultBook"] == "selected-book"
+    assert list(catalog["books"]) == ["selected-book"]
+
+
+def test_build_book_catalog_requires_built_data(tmp_path: Path) -> None:
+    manifest = write_external_book(tmp_path / "books", "unbuilt-book", built=False)
+    with pytest.raises(ValueError, match="has not been built"):
+        build_book_catalog(manifest)
 
 
 def test_build_catalog_requires_a_built_book(tmp_path: Path) -> None:

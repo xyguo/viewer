@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .builder import build_book
-from .library import build_catalog, validate_library, write_manifest_schema
+from .library import build_book_catalog, build_catalog, validate_library, write_manifest_schema
 
 
 def create_build_parser() -> argparse.ArgumentParser:
@@ -29,6 +29,7 @@ def run_build(argv: Sequence[str] | None = None) -> int:
     args = create_build_parser().parse_args(argv)
     manifest_path: Path = args.manifest
     result = build_book(manifest_path)
+    book_catalog_result = build_book_catalog(manifest_path)
     catalog_result = build_catalog(
         manifest_path.resolve().parent.parent,
         default_book=args.default_book,
@@ -38,6 +39,7 @@ def run_build(argv: Sequence[str] | None = None) -> int:
         f"Built {result.output_path} with {result.segment_count} aligned segments "
         f"across {result.chapter_count} chapters."
     )
+    print(f"Built {book_catalog_result.output_path} with a portable one-book catalog.")
     print(
         f"Built {catalog_result.output_path} with "
         f"{catalog_result.book_count} available {book_label}."

@@ -68,6 +68,10 @@ def test_reader_links_back_to_catalog_and_bootstrap_routes_by_book() -> None:
     assert 'new URLSearchParams(location.search).get("book")' in bootstrap
     assert "if (!requestedSlug)" in bootstrap
     assert "showCatalog();" in bootstrap
+    assert 'const LOCAL_CATALOG_URL = "books/catalog.js";' in bootstrap
+    assert 'const EXAMPLE_CATALOG_URL = "books/example/catalog.js";' in bootstrap
+    assert "loadCatalogScript(LOCAL_CATALOG_URL" in bootstrap
+    assert "loadCatalogScript(EXAMPLE_CATALOG_URL" in bootstrap
     assert "link.href = `?book=${encodeURIComponent(slug)}`" in bootstrap
     assert "typeset: false" in bootstrap
     assert '"vendor/mathjax/es5/tex-chtml.js"' in bootstrap

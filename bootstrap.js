@@ -2,6 +2,8 @@
   "use strict";
 
   const SUPPORTED_BOOK_SCHEMA_VERSION = 2;
+  const LOCAL_CATALOG_URL = "books/catalog.js";
+  const EXAMPLE_CATALOG_URL = "books/example/catalog.js";
   const MATHJAX_URLS = [
     "vendor/mathjax/es5/tex-chtml.js",
     "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"
@@ -186,5 +188,28 @@
     document.head.append(script);
   }
 
-  loadSelectedBook();
+  function loadCatalogScript(url, onError) {
+    const script = document.createElement("script");
+    script.src = url;
+    script.onload = loadSelectedBook;
+    script.onerror = () => {
+      script.remove();
+      onError();
+    };
+    document.head.append(script);
+  }
+
+  function loadCatalog() {
+    if (window.BOOK_VIEWER_CATALOG) {
+      loadSelectedBook();
+      return;
+    }
+    loadCatalogScript(LOCAL_CATALOG_URL, () => {
+      loadCatalogScript(EXAMPLE_CATALOG_URL, () => {
+        showCatalog("The local and example book catalogs are missing.");
+      });
+    });
+  }
+
+  loadCatalog();
 })();

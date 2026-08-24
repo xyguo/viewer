@@ -69,7 +69,13 @@ class ReaderHandler(SimpleHTTPRequestHandler):
         request_path = urllib.parse.urlsplit(path).path
         if request_path == "/books" or request_path.startswith("/books/"):
             relative_path = request_path.removeprefix("/books")
-            return str(_resolve_static_path(self.viewer_server.books_root, relative_path))
+            resolved_path = _resolve_static_path(self.viewer_server.books_root, relative_path)
+            if request_path == "/books/catalog.js" and not resolved_path.is_file():
+                resolved_path = _resolve_static_path(
+                    self.viewer_server.books_root,
+                    "/example/catalog.js",
+                )
+            return str(resolved_path)
         return super().translate_path(path)
 
     def do_POST(self) -> None:

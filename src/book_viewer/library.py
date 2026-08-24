@@ -66,6 +66,38 @@ def serialize_catalog(catalog: BookCatalog) -> str:
     return f"{CATALOG_VARIABLE} = {json.dumps(data, ensure_ascii=False, separators=(',', ':'))};\n"
 
 
+def _catalog_entry(local_book: LocalBook) -> CatalogEntry:
+    manifest = local_book.manifest
+    browser_path = PurePosixPath("books", manifest.slug, manifest.data_file).as_posix()
+    return CatalogEntry(
+        title=manifest.title,
+        description=manifest.description,
+        source_label=manifest.source.label,
+        target_label=manifest.target.label,
+        data_file=browser_path,
+    )
+
+
+def _write_catalog(catalog: BookCatalog, output_path: Path) -> CatalogBuildResult:
+    output_path.write_text(serialize_catalog(catalog), encoding="utf-8")
+    return CatalogBuildResult(output_path=output_path, book_count=len(catalog.books))
+
+
+def build_book_catalog(manifest_path: Path) -> CatalogBuildResult:
+    """Generate a portable one-entry catalog beside a built book manifest."""
+
+    local_book = load_local_book(manifest_path)
+    manifest = local_book.manifest
+    if not manifest.output_path(local_book.manifest_path).is_file():
+        raise ValueError(f"Book '{manifest.slug}' has not been built.")
+    catalog = BookCatalog(
+        schema_version=BOOK_SCHEMA_VERSION,
+        default_book=manifest.slug,
+        books={manifest.slug: _catalog_entry(local_book)},
+    )
+    return _write_catalog(catalog, local_book.manifest_path.parent / "catalog.js")
+
+
 def build_catalog(
     books_dir: Path,
     *,
@@ -80,14 +112,7 @@ def build_catalog(
         manifest = local_book.manifest
         if not manifest.output_path(local_book.manifest_path).is_file():
             continue
-        browser_path = PurePosixPath("books", manifest.slug, manifest.data_file).as_posix()
-        entries[manifest.slug] = CatalogEntry(
-            title=manifest.title,
-            description=manifest.description,
-            source_label=manifest.source.label,
-            target_label=manifest.target.label,
-            data_file=browser_path,
-        )
+        entries[manifest.slug] = _catalog_entry(local_book)
 
     if not entries:
         raise ValueError("No built external books were found for the browser catalog.")
@@ -100,9 +125,7 @@ def build_catalog(
         default_book=selected_default,
         books=entries,
     )
-    output_path = resolved_books_dir / "catalog.js"
-    output_path.write_text(serialize_catalog(catalog), encoding="utf-8")
-    return CatalogBuildResult(output_path=output_path, book_count=len(entries))
+    return _write_catalog(catalog, resolved_books_dir / "catalog.js")
 
 
 def manifest_schema_text() -> str:

@@ -196,6 +196,39 @@ def test_server_serves_external_books_from_a_separate_root(tmp_path: Path) -> No
     assert traversal_response.status == 404
 
 
+def test_server_falls_back_to_tracked_example_catalog(tmp_path: Path) -> None:
+    static_root = tmp_path / "static"
+    books_root = tmp_path / "books"
+    static_root.mkdir()
+    example_dir = books_root / "example"
+    example_dir.mkdir(parents=True)
+    (static_root / "index.html").write_text("Viewer", encoding="utf-8")
+    (example_dir / "catalog.js").write_text("Example catalog", encoding="utf-8")
+    settings = ServerSettings(
+        host="127.0.0.1",
+        port=0,
+        static_root=static_root,
+        books_root=books_root,
+    )
+    server = create_server(settings, translator=FakeTranslator())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address[:2]
+    try:
+        connection = http.client.HTTPConnection(str(host), int(port), timeout=2)
+        connection.request("GET", "/books/catalog.js")
+        response = connection.getresponse()
+        body = response.read().decode()
+        connection.close()
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert response.status == 200
+    assert body == "Example catalog"
+
+
 def test_server_type_is_explicit(tmp_path: Path) -> None:
     server = create_server(ServerSettings(static_root=tmp_path, port=0))
     try:

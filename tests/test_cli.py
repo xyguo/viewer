@@ -22,6 +22,7 @@ def test_run_build_uses_selected_manifest(
     catalog_path = tmp_path / "books" / "catalog.js"
     captured: list[Path] = []
     catalog_calls: list[tuple[Path, str | None]] = []
+    book_catalog_calls: list[Path] = []
 
     def fake_build(path: Path) -> BuildResult:
         captured.append(path)
@@ -31,14 +32,21 @@ def test_run_build_uses_selected_manifest(
         catalog_calls.append((books_dir, default_book))
         return CatalogBuildResult(output_path=catalog_path, book_count=1)
 
+    def fake_book_catalog(path: Path) -> CatalogBuildResult:
+        book_catalog_calls.append(path)
+        return CatalogBuildResult(output_path=manifest_path.parent / "catalog.js", book_count=1)
+
     monkeypatch.setattr(cli, "build_book", fake_build)
+    monkeypatch.setattr(cli, "build_book_catalog", fake_book_catalog)
     monkeypatch.setattr(cli, "build_catalog", fake_catalog)
     assert cli.run_build(["--manifest", str(manifest_path), "--default-book", "example-book"]) == 0
     assert captured == [manifest_path]
+    assert book_catalog_calls == [manifest_path]
     assert catalog_calls == [(manifest_path.parent.parent, "example-book")]
     output = capsys.readouterr().out
     assert "7 aligned segments" in output
     assert "across 2 chapters" in output
+    assert "portable one-book catalog" in output
     assert "1 available book." in output
 
 
