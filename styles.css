@@ -742,6 +742,101 @@ button {
   font-size: 0.86em;
 }
 
+.document-content pre {
+  margin: 1.45em 0;
+  overflow-x: auto;
+  border: 1px solid #ccd2d5;
+  border-radius: 8px;
+  background: #e9edef;
+  color: #202b34;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.58;
+  tab-size: 2;
+}
+
+.document-content pre code {
+  display: block;
+  min-width: max-content;
+  margin-left: 3.3rem;
+  padding: 0.9rem 1rem;
+  border-left: 1px solid #ccd2d5;
+  border-radius: 0;
+  background: #f8f9f8;
+  color: inherit;
+  font-size: inherit;
+  counter-reset: code-line;
+}
+
+.document-content pre code > span {
+  position: relative;
+  display: inline-block;
+  min-width: 100%;
+  min-height: 1.58em;
+  counter-increment: code-line;
+}
+
+.document-content pre code > span::before {
+  position: absolute;
+  left: -4.3rem;
+  width: 2.8rem;
+  color: #7b858b;
+  content: counter(code-line);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
+.document-content pre code .co,
+.document-content pre code .do,
+.document-content pre code .an,
+.document-content pre code .cv {
+  color: #607c56;
+  font-style: italic;
+}
+
+.document-content pre code .kw,
+.document-content pre code .cf,
+.document-content pre code .pp {
+  color: #a24324;
+}
+
+.document-content pre code .dt,
+.document-content pre code .bu,
+.document-content pre code .im {
+  color: #7a3e8e;
+}
+
+.document-content pre code .st,
+.document-content pre code .vs,
+.document-content pre code .ss,
+.document-content pre code .ch {
+  color: #28679b;
+}
+
+.document-content pre code .dv,
+.document-content pre code .bn,
+.document-content pre code .fl,
+.document-content pre code .cn {
+  color: #087f79;
+}
+
+.document-content pre code .fu,
+.document-content pre code .ot {
+  color: #745d00;
+}
+
+.document-content pre code .op,
+.document-content pre code .sc {
+  color: #52616a;
+}
+
+.document-content pre code .al,
+.document-content pre code .er {
+  color: #b42318;
+  font-weight: 700;
+}
+
 .document-content .segment {
   margin-inline: -2px;
   padding: 2px;

@@ -105,6 +105,17 @@ def test_reader_loads_chapters_and_avoids_linear_scroll_scans() -> None:
     assert "originSegments.find" not in app
 
 
+def test_reader_styles_numbered_highlighted_code_blocks() -> None:
+    viewer_root = Path(__file__).resolve().parents[1]
+    styles = (viewer_root / "styles.css").read_text(encoding="utf-8")
+
+    assert ".document-content pre code > span::before" in styles
+    assert "content: counter(code-line);" in styles
+    assert ".document-content pre code .kw" in styles
+    assert ".document-content pre code .st" in styles
+    assert ".document-content pre code .co" in styles
+
+
 def test_live_translation_exposes_supported_target_languages() -> None:
     viewer_root = Path(__file__).resolve().parents[1]
     markup = load_markup(viewer_root)

@@ -22,6 +22,7 @@ from .models import (
     BuildResult,
     TocEntry,
 )
+from .syntax_highlighting import highlight_code_blocks
 
 ID_RE = re.compile(r'\bid="([^"]+)"')
 HREF_RE = re.compile(r'href="#([^"]+)"')
@@ -265,7 +266,7 @@ def render_markdown(markdown: str) -> str:
     )
     if process.returncode:
         raise RuntimeError(f"Pandoc failed: {process.stderr.strip()}")
-    return process.stdout.strip()
+    return highlight_code_blocks(process.stdout.strip())
 
 
 def prefix_html_ids(html: str, prefix: str) -> str:

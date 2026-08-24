@@ -229,6 +229,27 @@ def test_render_markdown_requires_pandoc(monkeypatch: MonkeyPatch) -> None:
         builder.render_markdown("Text")
 
 
+def test_render_markdown_applies_code_block_highlighting(monkeypatch: MonkeyPatch) -> None:
+    def pandoc_executable(_name: str) -> str:
+        return "/usr/bin/pandoc"
+
+    monkeypatch.setattr(builder.shutil, "which", pandoc_executable)
+
+    def successful_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            ["pandoc"],
+            returncode=0,
+            stdout='<pre class="lean"><code>def answer : Nat := 42</code></pre>\n',
+            stderr="",
+        )
+
+    monkeypatch.setattr(builder.subprocess, "run", successful_run)
+
+    rendered = builder.render_markdown("```lean\ndef answer : Nat := 42\n```")
+
+    assert '<span class="code-line"><span class="kw">def</span>' in rendered
+
+
 def test_render_markdown_reports_pandoc_failure(monkeypatch: MonkeyPatch) -> None:
     def pandoc_executable(_name: str) -> str:
         return "/usr/bin/pandoc"
