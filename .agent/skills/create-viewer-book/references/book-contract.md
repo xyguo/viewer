@@ -9,7 +9,7 @@ From the viewer repository root, inspect these before writing metadata:
 - `schemas/book.schema.json`: checked-in manifest schema.
 - `src/book_viewer/models.py`: strict Pydantic data contracts and current schema version.
 - `src/book_viewer/builder.py`: Markdown rendering, alignment, chapter, equation-tag, and asset invariants.
-- `README.md`, section `Add another book`: supported build commands and current layout.
+- `AGENTS.md`: repository boundaries, development workflow, and metadata maintenance policy.
 
 Repository code wins if an example in this skill has become stale.
 
@@ -70,6 +70,18 @@ Use the schema version and constraints currently declared by `schemas/book.schem
 ```
 
 Use a lowercase hyphenated slug. Use valid BCP 47 values for `html_lang`, human-readable labels for controls, and distinct lowercase HTML ID prefixes. Add only MathJax packages and macros the document needs.
+
+## Metadata compatibility
+
+`schema_version` is mandatory. Use the version currently declared by the checked-in schema and models; do not copy a version from an older book without verifying it. The manifest, catalog entry, chapter index, and chapter payloads share this compatibility version, and the viewer intentionally rejects stale generated data.
+
+`schemas/book.schema.json` is generated from the strict Pydantic `BookManifest` model. Application developers changing that model must regenerate the schema with:
+
+```sh
+UV_CACHE_DIR=.uv-cache uv run --offline book-viewer-schema --output schemas/book.schema.json
+```
+
+Book creation work must validate the complete external library against the checked-out application before completion. Repair an incompatible manifest and rebuild its generated metadata; do not weaken validation or hand-edit the schema to accept stale data.
 
 ## Markdown dialect
 

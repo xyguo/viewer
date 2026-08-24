@@ -1,245 +1,53 @@
 # Parallel Book Viewer
 
-Parallel Book Viewer is a lightweight, sentence-aligned reader for translated books. The browser application and Python tooling are book-independent. Book content is a local external library under `books/` and is intentionally excluded from Git.
+A lightweight local reader for studying sentence-aligned source documents and translations side by side or one language at a time.
 
-## Project layout
+![Source and translation displayed side by side](docs/assets/reader-side-by-side.png)
 
-```text
-viewer/
-├── app.js, bootstrap.js, index.html, styles.css  # generic static reader
-├── books/                                       # ignored external book library
-│   ├── catalog.js                               # generated local catalog
-│   └── <slug>/
-│       ├── book.json                            # local versioned manifest
-│       ├── source.md, target.md                 # local paired editions
-│       ├── document-data.js                     # generated chapter index
-│       ├── document-data-chunks/                # generated edition chapters
-│       └── assets/                              # local book-specific files
-├── schemas/book.schema.json                     # tracked metadata contract
-├── src/book_viewer/                             # typed builder and local server
-├── tests/                                       # Python unit and HTTP tests
-├── pyproject.toml                               # dependencies and quality policy
-└── uv.lock                                      # reproducible dependency lock
-```
+![Single-language view with its corresponding translation](docs/assets/reader-translation-popup.png)
 
-## Set up the project
+## Install and run
 
-Install [uv](https://docs.astral.sh/uv/), then run:
+Install [uv](https://docs.astral.sh/uv/), clone this repository, enter its root, and run:
 
 ```sh
-cd /Users/xyguo/Programs/Study/Language/textbook/viewer
-UV_CACHE_DIR=.uv-cache uv sync --all-groups --locked
-```
-
-uv creates and manages the project-specific `.venv` automatically. Python dependencies must not be installed globally.
-
-Pandoc is also required when rebuilding a book. It is a build-time executable, not a Python or browser dependency.
-
-The repository does not contain books after a fresh clone. Restore or synchronize your external `books/` library separately. Because Git ignores that directory, its Markdown and assets need their own backup strategy.
-
-## Read a book
-
-Build at least one local external book, then open `index.html` directly. The startup page lists every built book in the local catalog; select a card to open its reader. The generated `document-data.js` contains only the book and chapter index. Source and target chapters load on demand from `document-data-chunks/`, and MathJax typesets only the current chapter. The reader prefers the optional thin local MathJax installation and falls back to the pinned CDN build when it is absent.
-
-`book-viewer-build` regenerates `books/catalog.js` from all valid local manifests that have browser data. Reader pages link back to the catalog. A specific book can also be opened directly with a query parameter:
-
-```text
-index.html?book=another-book
-```
-
-The reader supports synchronized scrolling, sentence highlighting, counterpart popovers in one-language mode, and chapter navigation.
-
-## Use live translation
-
-Live mode needs the local server because browsers must not receive provider credentials or call the translation service directly. The only backend contract is an OpenAI-compatible Chat Completions API.
-
-Copy the example configuration and set the complete endpoint URL and model identifier supplied by your provider:
-
-```sh
-cp .env.example .env
-```
-
-`.env` is loaded automatically and ignored by Git. Then run:
-
-```sh
-UV_CACHE_DIR=.uv-cache uv run book-viewer-serve
-```
-
-Open `http://127.0.0.1:8000`. There is deliberately no default backend. Without `LLM_CHAT_COMPLETIONS_URL` and `LLM_MODEL`, the static reader still works and live translation returns a configuration error.
-
-The clicked source sentence is the only user message. Up to two neighboring sentences on each side are included in the system message as translation context.
-
-For the current llama.cpp SSH tunnel, use:
-
-```sh
-VIEWER_HOST=127.0.0.1 \
-VIEWER_PORT=8000 \
-LLM_CHAT_COMPLETIONS_URL=http://127.0.0.1:8080/v1/chat/completions \
-LLM_MODEL=tencent-hy-mt \
-TRANSLATION_TIMEOUT_SECONDS=90 \
-UV_CACHE_DIR=.uv-cache \
 uv run book-viewer-serve
 ```
 
-For a hosted provider using standard Bearer authentication, configure:
+Open `http://127.0.0.1:8000` in a browser.
 
-```sh
-LLM_CHAT_COMPLETIONS_URL=https://provider.example/v1/chat/completions \
-LLM_MODEL=provider-model-name \
-LLM_API_KEY=replace-me \
-UV_CACHE_DIR=.uv-cache \
-uv run book-viewer-serve
-```
+When run from source, the app reads its library from the repository's `books/` directory. A standalone executable instead looks for `books/` beside the executable. Set `VIEWER_BOOKS_ROOT=/absolute/path/to/books` to use another location in either case.
 
-Provider configuration:
-
-- `LLM_CHAT_COMPLETIONS_URL`: complete Chat Completions endpoint; required with `LLM_MODEL`.
-- `LLM_MODEL`: provider model identifier; required with the endpoint.
-- `LLM_API_KEY`: optional secret, sent only by the local server.
-- `LLM_API_KEY_HEADER`: authentication header name, defaulting to `Authorization`.
-- `LLM_API_KEY_SCHEME`: authentication prefix, defaulting to `Bearer`; set it to an empty value for an unprefixed key.
-- `LLM_EXTRA_HEADERS`: optional JSON object for provider-specific headers.
-- `LLM_TEMPERATURE` and `LLM_MAX_TOKENS`: optional generation controls.
-- `TRANSLATION_TIMEOUT_SECONDS`: upstream request timeout.
-
-For example, a service expecting `api-key: <key>` can use `LLM_API_KEY_HEADER=api-key` and an empty `LLM_API_KEY_SCHEME`. No provider SDK is required.
-
-## Build a standalone executable
-
-Build a single platform-specific executable with:
+Build the platform-specific standalone executable with:
 
 ```sh
 scripts/build-binary.sh
 ```
 
-The result is `dist/book-viewer`. PyInstaller executables are platform-specific, so build once on each operating system and architecture you plan to distribute. Put the executable next to the external `books/` directory and run it directly:
+The result is `dist/book-viewer`; book data remains external to the executable.
 
-```text
-release/
-├── book-viewer
-└── books/
-    ├── catalog.js
-    └── <slug>/
-```
+## Add a book
 
-The executable contains the generic reader, Python runtime, and server dependencies. It deliberately does not contain book data. Set `VIEWER_BOOKS_ROOT` when the library is not next to the executable. As with the uv command, live translation remains optional and uses the same environment variables.
+Create a `books/` folder in the repository and put the PDF you want to read in it. Then point an AI agent at the repository and ask it to use the project skill at `.agent/skills/create-viewer-book` to convert the PDF into the format accepted by the viewer.
 
-## Install MathJax for fully offline reading
+Book source files, translations, metadata, generated browser data, and assets under `books/` remain local and are intentionally excluded from Git.
 
-Install the pinned minimal runtime with no Node.js dependency:
+## Live translation
+
+Live translation requires an OpenAI-compatible Chat Completions service. Copy the example configuration:
 
 ```sh
-UV_CACHE_DIR=.uv-cache uv run book-viewer-install-mathjax
+cp .env.example .env
 ```
 
-The installer verifies the MathJax 3.2.2 archive checksum and extracts only `tex-chtml.js`, its CommonHTML webfonts, the non-bundled TeX extensions requested by current `book.json` manifests, and the upstream license. The resulting `vendor/mathjax/` directory is approximately 1.5 MiB for the current library and is intentionally ignored by Git.
+Set `LLM_CHAT_COMPLETIONS_URL` and `LLM_MODEL`; add `LLM_API_KEY` only when the provider requires it. Restart `book-viewer-serve` after changing the configuration. See [.env.example](.env.example) for the optional settings.
 
-Run the installer before `scripts/build-binary.sh` to embed this thin runtime into the standalone executable. Without it, both source mode and the executable retain the CDN fallback; with it, formulas render without network access.
+## Offline Math rendering
 
-## Add another book
-
-Create `books/<slug>/` and keep its source Markdown, target Markdown, assets, manifest, and generated browser data together. All of it remains local and ignored by Git.
-
-The manifest must declare the current schema version. The optional `$schema` field gives compatible editors the tracked JSON Schema:
-
-```json
-{
-  "$schema": "../../schemas/book.schema.json",
-  "schema_version": 2,
-  "slug": "another-book",
-  "title": "Another Book",
-  "reader_title": "Another Book Reader",
-  "description": "A sentence-aligned source and translation.",
-  "source": {
-    "language": "Japanese",
-    "label": "日本語",
-    "html_lang": "ja",
-    "markdown": "source.md",
-    "html_id_prefix": "source"
-  },
-  "target": {
-    "language": "English",
-    "label": "English",
-    "html_lang": "en",
-    "markdown": "target.md",
-    "html_id_prefix": "target"
-  },
-  "data_file": "document-data.js",
-  "asset_rewrites": {
-    "assets/": "books/another-book/assets/"
-  },
-  "mathjax": {
-    "packages": ["ams"],
-    "macros": {}
-  }
-}
-```
-
-Both Markdown editions must use matching wrappers such as:
-
-```html
-<span class="segment" data-seg="chapter-01-sentence-0001">Sentence text.</span>
-```
-
-The boundary rule is intentionally mechanical: headings and captions are one segment, prose is split at ordinary sentence-final punctuation, and a display formula remains one block between neighboring prose segments. Only the ordered `data-seg` values define the mapping. Every top-level `h1` starts an independently loadable chapter, so the two editions must also have matching `h1` boundaries. The builder rejects missing, duplicate, or differently ordered IDs, mismatched chapter boundaries, mismatched equation tags, mismatched figures, and missing local assets.
-
-Put book-specific figures under `books/<slug>/assets/` and reference them as `assets/...` from both Markdown files. `asset_rewrites` maps those local Markdown paths to paths relative to the generic `index.html`.
-
-Build the book and regenerate the local catalog:
+The viewer uses MathJax to render equations, which requires to connect to their CDN. If you want to use the viewer without internet, you can install a thin local MathJax runtime:
 
 ```sh
-UV_CACHE_DIR=.uv-cache uv run book-viewer-build \
-  --manifest books/another-book/book.json \
-  --default-book another-book
+uv run book-viewer-install-mathjax
 ```
 
-Equation numbers written with LaTeX `\tag{...}` are preserved and checked across both editions.
-
-## Metadata compatibility
-
-`schema_version` is required, and the catalog, chapter index, and chapter payloads carry the same version. The viewer rejects stale generated data instead of attempting to interpret an incompatible format.
-
-The canonical contract is [schemas/book.schema.json](schemas/book.schema.json). It is generated from the strict Pydantic `BookManifest` model, and the test suite fails if the tracked schema drifts from the application model.
-
-Validate every locally present external manifest without rebuilding the books:
-
-```sh
-UV_CACHE_DIR=.uv-cache uv run book-viewer-validate --books-dir books
-```
-
-When deliberately changing the metadata model, regenerate the tracked schema with:
-
-```sh
-UV_CACHE_DIR=.uv-cache uv run book-viewer-schema --output schemas/book.schema.json
-```
-
-## Quality gates
-
-Install the repository's pre-commit hook once after setup:
-
-```sh
-UV_CACHE_DIR=.uv-cache uv run pre-commit install
-```
-
-Every commit then runs the complete project quality gate. Run the same gate manually with:
-
-```sh
-scripts/check.sh
-```
-
-The gate performs:
-
-- Ruff formatting verification and linting;
-- Pyright in strict mode;
-- Pytest with branch coverage; and
-- an 80% minimum total coverage threshold enforced by `pyproject.toml`; and
-- compatibility validation for every external book currently present under `books/`.
-
-Individual commands are also available:
-
-```sh
-UV_CACHE_DIR=.uv-cache uv run --offline ruff format --check src tests
-UV_CACHE_DIR=.uv-cache uv run --offline ruff check src tests
-UV_CACHE_DIR=.uv-cache uv run --offline pyright
-UV_CACHE_DIR=.uv-cache uv run --offline pytest
-```
+Run this before `scripts/build-binary.sh` to include MathJax in the standalone executable. The installed files under `vendor/mathjax/` are intentionally excluded from Git.
