@@ -11,7 +11,8 @@ Produce a complete external book package that the current viewer can build and r
 
 1. Read [references/book-contract.md](references/book-contract.md) before creating or changing any book files.
 2. For PDF, scan, image, or layout-sensitive input, also read [references/document-ingestion.md](references/document-ingestion.md) before transcription.
-3. Read [references/verification.md](references/verification.md) before building or declaring completion.
+3. For LLM-assisted sentence translation, read [references/translation.md](references/translation.md) before creating `target.md`.
+4. Read [references/verification.md](references/verification.md) before building or declaring completion.
 
 ## Workflow
 
