@@ -80,7 +80,7 @@ select = [
 "tests/**/*.py" = ["ANN401"]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", ".agent/skills/create-viewer-book/scripts"]
 exclude = [".venv", "books"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"

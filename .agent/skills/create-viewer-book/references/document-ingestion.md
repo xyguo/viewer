@@ -14,6 +14,43 @@ Record the input filename, page count, source language, title, authors, visible 
 4. Reconstruct formulas from the visual source. Verify symbols, indices, operator names, matrix dimensions, cases, relation signs, and printed equation numbers.
 5. Extract or crop each figure into `assets/figures/` with deterministic names tied to the source page or section. Verify the resulting image visually.
 
+## Reusable PDF transcription
+
+For page-wise vision transcription, use
+[`scripts/transcribe_pdf.py`](../scripts/transcribe_pdf.py). It renders the PDF with Poppler,
+adds the text layer as an OCR aid, sends each selected page to an OpenAI-compatible multimodal
+Chat Completions endpoint, and writes resumable fragments under `source-pages/`.
+
+Run it from the viewer repository with explicit document and service settings:
+
+```sh
+OPENAI_CHAT_COMPLETIONS_URL=https://provider.example/v1/chat/completions \
+OPENAI_MODEL=vision-model \
+OPENAI_API_KEY=secret \
+uv run python .agent/skills/create-viewer-book/scripts/transcribe_pdf.py \
+  /path/to/input.pdf /path/to/work-dir --source-language German --workers 4
+```
+
+The API key is optional for unauthenticated local services. Use one work directory per PDF.
+Existing nonempty page fragments are cached; pass `--force` only for pages that need replacement.
+Use `--pages 12-18,24` for a repair run. Run `--help` for rendering, retry, prompt, and text-layer
+controls.
+
+The request body uses standard multimodal Chat Completions fields. If a provider supports useful
+extensions, pass a JSON object with `--extra-body-file`. For example, a llama.cpp deployment that
+supports Qwen's template switch can receive:
+
+```json
+{
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  }
+}
+```
+
+Treat the fragments as OCR candidates. Perform the coverage and visual audits below before
+assembling `source.md`; rerun flagged pages with a stronger model or a tailored prompt.
+
 When parallel workers or multiple models are available, assign disjoint page ranges and a single shared contract for IDs, Markdown, terminology, and output filenames. Require each worker to report its exact coverage. Assemble only after checking that ranges are contiguous and non-overlapping.
 
 ## Transcribe before translating
