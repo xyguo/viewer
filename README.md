@@ -26,6 +26,13 @@ scripts/build-binary.sh
 
 The result is `dist/book-viewer`; book data remains external to the executable.
 
+### Dependencies
+
+- **Python 3.12 or newer and uv:** run the source server, install its small Python dependency set, and execute the book-building tools. Neither is required by the standalone executable.
+- **Pandoc:** required only when building or rebuilding a book. It converts the paired Markdown editions to static HTML and produces syntax-highlighting tokens. It is not bundled with the standalone executable and is not needed to view an already-built book.
+- **MathJax:** renders equations in the browser. The viewer loads it from a CDN by default; a local copy can be installed for offline use.
+- **OpenAI-compatible Chat Completions service:** optional and used only for live translation.
+
 ## Add a book
 
 Create a `books/` folder in the repository and put the PDF you want to read in it. Then point an AI agent at the repository and ask it to use the project skill at `.agent/skills/create-viewer-book` to convert the PDF into the format accepted by the viewer.
