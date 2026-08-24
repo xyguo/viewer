@@ -83,6 +83,34 @@ def _write_catalog(catalog: BookCatalog, output_path: Path) -> CatalogBuildResul
     return CatalogBuildResult(output_path=output_path, book_count=len(catalog.books))
 
 
+def create_catalog(
+    books_dir: Path,
+    *,
+    default_book: str | None = None,
+) -> BookCatalog | None:
+    """Create a catalog from locally available, built books without writing it."""
+
+    local_books = validate_library(books_dir.resolve())
+    entries: dict[str, CatalogEntry] = {}
+    for local_book in local_books:
+        manifest = local_book.manifest
+        if not manifest.output_path(local_book.manifest_path).is_file():
+            continue
+        entries[manifest.slug] = _catalog_entry(local_book)
+
+    if not entries:
+        return None
+    selected_default = default_book or next(iter(entries))
+    if selected_default not in entries:
+        raise ValueError(f"Default book '{selected_default}' has not been built.")
+
+    return BookCatalog(
+        schema_version=BOOK_SCHEMA_VERSION,
+        default_book=selected_default,
+        books=entries,
+    )
+
+
 def build_book_catalog(manifest_path: Path) -> CatalogBuildResult:
     """Generate a portable one-entry catalog beside a built book manifest."""
 
@@ -106,25 +134,9 @@ def build_catalog(
     """Generate the runtime catalog from locally available, built books."""
 
     resolved_books_dir = books_dir.resolve()
-    local_books = validate_library(resolved_books_dir)
-    entries: dict[str, CatalogEntry] = {}
-    for local_book in local_books:
-        manifest = local_book.manifest
-        if not manifest.output_path(local_book.manifest_path).is_file():
-            continue
-        entries[manifest.slug] = _catalog_entry(local_book)
-
-    if not entries:
+    catalog = create_catalog(resolved_books_dir, default_book=default_book)
+    if catalog is None:
         raise ValueError("No built external books were found for the browser catalog.")
-    selected_default = default_book or next(iter(entries))
-    if selected_default not in entries:
-        raise ValueError(f"Default book '{selected_default}' has not been built.")
-
-    catalog = BookCatalog(
-        schema_version=BOOK_SCHEMA_VERSION,
-        default_book=selected_default,
-        books=entries,
-    )
     return _write_catalog(catalog, resolved_books_dir / "catalog.js")
 
 

@@ -15,6 +15,7 @@ from typing import cast
 
 from pydantic import BaseModel, ValidationError
 
+from .library import create_catalog, serialize_catalog
 from .models import ErrorResponse, TranslationRequest, TranslationResponse
 from .settings import ServerSettings
 from .translation import (
@@ -45,6 +46,9 @@ class BookViewerHTTPServer(ThreadingHTTPServer):
             raise FileNotFoundError(f"Viewer static root does not exist: {static_root}")
         self.settings = settings
         self.books_root = settings.books_root.resolve()
+        catalog = create_catalog(self.books_root)
+        self.catalog_javascript = None if catalog is None else serialize_catalog(catalog).encode()
+        self.catalog_book_count = 0 if catalog is None else len(catalog.books)
         if translator is not None:
             self.translator = translator
         elif settings.translation_backend_configured:
@@ -77,6 +81,20 @@ class ReaderHandler(SimpleHTTPRequestHandler):
                 )
             return str(resolved_path)
         return super().translate_path(path)
+
+    def do_GET(self) -> None:
+        request_path = urllib.parse.urlsplit(self.path).path
+        catalog = self.viewer_server.catalog_javascript
+        if request_path == "/books/catalog.js" and catalog is not None:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(catalog)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(catalog)
+            return
+        super().do_GET()
 
     def do_POST(self) -> None:
         if self.path != "/api/translate":
@@ -182,6 +200,7 @@ def run_server(settings: ServerSettings | None = None) -> int:
     try:
         host, port = server.server_address[:2]
         print(f"Parallel book reader available at http://{host}:{port}")
+        print(f"Found {server.catalog_book_count} built books in {server.books_root}")
         print("Press Ctrl-C to stop.")
         try:
             server.serve_forever()

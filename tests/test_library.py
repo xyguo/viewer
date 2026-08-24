@@ -10,6 +10,7 @@ import pytest
 from book_viewer.library import (
     build_book_catalog,
     build_catalog,
+    create_catalog,
     load_local_book,
     manifest_schema_text,
     validate_library,
@@ -122,6 +123,18 @@ def test_build_catalog_includes_only_built_books(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="has not been built"):
         build_catalog(books_dir, default_book="unbuilt-book")
+
+
+def test_create_catalog_does_not_require_or_write_catalog_file(tmp_path: Path) -> None:
+    books_dir = tmp_path / "books"
+    write_external_book(books_dir, "available-book")
+
+    catalog = create_catalog(books_dir)
+
+    assert catalog is not None
+    assert catalog.default_book == "available-book"
+    assert list(catalog.books) == ["available-book"]
+    assert not (books_dir / "catalog.js").exists()
 
 
 def test_build_book_catalog_contains_only_selected_book(tmp_path: Path) -> None:
