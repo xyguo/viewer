@@ -8,5 +8,5 @@
     "target": "ES2022",
     "types": []
   },
-  "files": ["frontend.d.ts", "app.js", "bootstrap.js", "preferences.js"]
+  "files": ["frontend.d.ts", "app.js", "bootstrap.js", "preferences.js", "settings.js"]
 }

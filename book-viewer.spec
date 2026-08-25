@@ -7,6 +7,7 @@ project_root = Path(SPECPATH)
 datas = [
     (str(project_root / "index.html"), "."),
     (str(project_root / "preferences.js"), "."),
+    (str(project_root / "settings.js"), "."),
     (str(project_root / "app.js"), "."),
     (str(project_root / "bootstrap.js"), "."),
     (str(project_root / "styles.css"), "."),

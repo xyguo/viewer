@@ -118,7 +118,7 @@ def test_reader_persists_library_recency_and_reading_position() -> None:
         if element.tag == "script" and element.attributes.get("src")
     ]
 
-    assert scripts[-3:] == ["preferences.js", "app.js", "bootstrap.js"]
+    assert scripts[-4:] == ["preferences.js", "settings.js", "app.js", "bootstrap.js"]
     assert 'const STORAGE_PREFIX = "book-viewer-reading:v1:";' in preferences
     assert 'const READING_STATES_URL = "/api/reading-states";' in preferences
     assert "localStorage.getItem(storageKey(slug))" in preferences
@@ -137,6 +137,7 @@ def test_reader_persists_library_recency_and_reading_position() -> None:
     assert "progressPercent: readingProgressPercent(segmentId)" in app
     assert 'window.addEventListener("pagehide", flushReadingPosition)' in app
     assert '(str(project_root / "preferences.js"), ".")' in binary_spec
+    assert '(str(project_root / "settings.js"), ".")' in binary_spec
 
     styles = (viewer_root / "styles.css").read_text(encoding="utf-8")
     assert "progress.textContent = `${progressPercent}% read`" in bootstrap
@@ -174,6 +175,30 @@ def test_live_translation_exposes_supported_target_languages() -> None:
     assert "target_language: targetLanguage" in app
     assert 'liveTargetLanguageSelect.addEventListener("change"' in app
     assert "book-viewer-live:${data.slug}:${targetLanguage}" in app
+
+
+def test_settings_page_is_accessible_and_protects_api_keys() -> None:
+    viewer_root = Path(__file__).resolve().parents[1]
+    markup = load_markup(viewer_root)
+    settings_script = (viewer_root / "settings.js").read_text(encoding="utf-8")
+
+    settings_buttons = [
+        element for element in markup.elements if "data-settings-open" in element.attributes
+    ]
+    assert len(settings_buttons) == 2
+    assert all(button.attributes["aria-label"] == "Open settings" for button in settings_buttons)
+    assert markup.by_id("settings-dialog").tag == "dialog"
+    assert markup.by_id("settings-form").tag == "form"
+    assert markup.by_id("settings-restart-dialog").tag == "dialog"
+    assert 'const SETTINGS_URL = "/api/settings";' in settings_script
+    assert (
+        'if (field.sensitive || field.inputType === "password") return "password";'
+        in settings_script
+    )
+    assert "Stored value hidden; enter to replace" in settings_script
+    assert "A key is stored in your OS keyring" in settings_script
+    assert 'note.className = "settings-note";' in settings_script
+    assert "restartDialog.showModal()" in settings_script
 
 
 def test_source_only_books_force_live_translation_mode() -> None:

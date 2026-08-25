@@ -57,13 +57,7 @@ Except for the small tracked `books/example/` package, book source files, transl
 
 ## Live translation
 
-Live translation requires an OpenAI-compatible Chat Completions service. Copy the example configuration:
-
-```sh
-cp .env.example .env
-```
-
-Set `LLM_CHAT_COMPLETIONS_URL` and `LLM_MODEL`; add `LLM_API_KEY` only when the provider requires it. Restart `book-viewer-serve` after changing the configuration. See [.env.example](.env.example) for the optional settings.
+Live translation requires an OpenAI-compatible Chat Completions LLM service. You can configure the access to such service in the setting panel of the web UI. Basically this will be the endpoint URL (i.e., the "`.../v1/chat/completions`"), the model name, and the API key. The configuration is essentially generated and stored in a `config.toml` file. You can refer to [`config.example.toml`](./config.example.toml) to see an example.
 
 ## Offline Math rendering
 

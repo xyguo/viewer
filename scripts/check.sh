@@ -14,7 +14,7 @@ require_command() {
 require_command biome
 require_command tsc
 
-biome ci app.js bootstrap.js preferences.js
+biome ci app.js bootstrap.js preferences.js settings.js
 tsc --project jsconfig.json
 uv sync --all-groups --locked
 uv run --offline ruff format --check src tests .agent/skills/create-viewer-book/scripts

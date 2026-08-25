@@ -83,6 +83,25 @@ interface ReadingPosition {
   targetScrollTop: number | null;
 }
 
+interface SettingsField {
+  name: string;
+  label: string;
+  description: string;
+  note: string | null;
+  group: string;
+  inputType: "text" | "number" | "url" | "password" | "json" | "path";
+  value: string | null;
+  defaultValue: string | null;
+  isSet: boolean;
+  sensitive: boolean;
+}
+
+interface SettingsDocument {
+  source: string;
+  fields: SettingsField[];
+  restartRequired: boolean;
+}
+
 interface ReaderAppState {
   mode: ReaderMode;
   view: ReaderView;
