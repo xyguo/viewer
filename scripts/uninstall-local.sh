@@ -101,6 +101,14 @@ if [ "$PURGE_DATA" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ]; then
     fi
 fi
 
+if [ -x "$INSTALLED_BINARY" ]; then
+    if "$INSTALLED_BINARY" --forget-api-key >/dev/null 2>&1; then
+        echo "Removed the stored live-translation API key."
+    else
+        echo "Warning: the stored live-translation API key could not be removed." >&2
+    fi
+fi
+
 remove_file "$INSTALLED_BINARY"
 remove_file "$CONFIG_PATH"
 

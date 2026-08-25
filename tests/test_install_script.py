@@ -6,6 +6,7 @@ import os
 import platform
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 BUILD_SCRIPT = Path(__file__).parents[1] / "scripts" / "build-binary.sh"
@@ -142,11 +143,52 @@ def test_installer_copies_binary_saves_config_and_sets_up_path(tmp_path: Path) -
     assert installed_binary.read_text(encoding="utf-8") == binary.read_text(encoding="utf-8")
     assert os.access(installed_binary, os.X_OK)
     assert not installed_binary.is_symlink()
-    assert config_path.read_text(encoding="utf-8") == f'books_root = "{books_root}"\n'
+    assert config_path.read_text(encoding="utf-8") == (
+        f'schema_version = 1\n\n[viewer]\nbooks_root = "{books_root}"\n'
+    )
     profile = (user_home / ".zprofile").read_text(encoding="utf-8")
     assert "# >>> Parallel Book Viewer >>>" in profile
     assert str(installed_binary.parent) in profile
     assert f"Remembered selected book library: {books_root}" in result.stdout
+
+
+def test_reinstall_updates_books_root_without_overwriting_other_settings(tmp_path: Path) -> None:
+    binary = tmp_path / "book-viewer"
+    _fake_executable(binary)
+    first_books_root = tmp_path / "first-books"
+    second_books_root = tmp_path / "second-books"
+    first_books_root.mkdir()
+    second_books_root.mkdir()
+    first_result, user_home = _run_installer(
+        tmp_path,
+        "--binary",
+        str(binary),
+        "--books-root",
+        str(first_books_root),
+        "--no-path",
+    )
+    assert first_result.returncode == 0, first_result.stderr
+    config_path, _reader_data_path = _application_paths(user_home)
+    with config_path.open("a", encoding="utf-8") as config_file:
+        config_file.write(
+            '\n[translation]\nmodel = "preserved-model"\n'
+            'chat_completions_url = "http://localhost:8080/v1/chat/completions"\n'
+        )
+
+    second_result, _user_home = _run_installer(
+        tmp_path,
+        "--binary",
+        str(binary),
+        "--books-root",
+        str(second_books_root),
+        "--no-path",
+    )
+
+    assert second_result.returncode == 0, second_result.stderr
+    with config_path.open("rb") as config_file:
+        config = tomllib.load(config_file)
+    assert config["viewer"]["books_root"] == str(second_books_root)
+    assert config["translation"]["model"] == "preserved-model"
 
 
 def test_installer_can_skip_shell_integration(tmp_path: Path) -> None:
@@ -219,6 +261,7 @@ def test_uninstaller_preserves_reader_data_and_books_by_default(tmp_path: Path) 
         encoding="utf-8"
     )
     assert "Preserved saved reader data" in result.stdout
+    assert "Removed the stored live-translation API key" in result.stdout
     assert "book library was not removed" in result.stdout
 
 

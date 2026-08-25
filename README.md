@@ -38,8 +38,8 @@ Remove a per-user installation with:
 scripts/uninstall-local.sh
 ```
 
-The uninstaller never removes the book library and preserves reading history unless you choose
-to delete it.
+The uninstaller removes the stored translation API key, never removes the book library, and
+preserves reading history unless you choose to delete it.
 
 ### Dependencies
 

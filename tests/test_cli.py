@@ -77,6 +77,11 @@ def test_uv_serve_entrypoint_opens_browser_by_default(monkeypatch: MonkeyPatch) 
         assert open_browser is True
         return 3
 
+    def fake_load_server_settings(*, books_root: Path | None = None) -> ServerSettings:
+        assert books_root is None
+        return ServerSettings()
+
+    monkeypatch.setattr(cli, "load_server_settings", fake_load_server_settings)
     monkeypatch.setattr(server, "run_server", fake_run_server)
     monkeypatch.setattr("sys.argv", ["book-viewer-serve"])
     with pytest.raises(SystemExit) as exit_info:
@@ -110,6 +115,11 @@ def test_run_serve_passes_command_line_options(
         assert open_browser is False
         return 0
 
+    def fake_load_server_settings(*, books_root: Path | None = None) -> ServerSettings:
+        assert books_root is not None
+        return ServerSettings(books_root=books_root)
+
+    monkeypatch.setattr(cli, "load_server_settings", fake_load_server_settings)
     monkeypatch.setattr(server, "run_server", fake_run_server)
     assert cli.run_serve(["--books-root", str(books_root), "--no-open"]) == 0
 
@@ -118,6 +128,20 @@ def test_run_serve_has_no_public_config_path_option(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exit_info:
         cli.run_serve(["--config", str(tmp_path / "missing.toml")])
     assert exit_info.value.code == 2
+
+
+def test_run_serve_can_remove_the_keyring_secret_and_exit(monkeypatch: MonkeyPatch) -> None:
+    deleted = False
+
+    class FakeCredentials:
+        def delete_api_key(self) -> None:
+            nonlocal deleted
+            deleted = True
+
+    monkeypatch.setattr(cli, "KeyringCredentialStore", FakeCredentials)
+
+    assert cli.run_serve(["--forget-api-key"]) == 0
+    assert deleted is True
 
 
 def test_validate_and_schema_commands(

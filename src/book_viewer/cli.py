@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .builder import build_book
+from .credentials import CredentialStoreError, KeyringCredentialStore
 from .library import build_book_catalog, build_catalog, validate_library, write_manifest_schema
 from .settings import load_server_settings
 
@@ -88,12 +89,17 @@ def create_serve_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--books-root",
         type=Path,
-        help="Book library; temporarily overrides VIEWER_BOOKS_ROOT and the saved library",
+        help="Book library; temporarily overrides viewer.books_root in config.toml",
     )
     parser.add_argument(
         "--no-open",
         action="store_true",
         help="Do not open the viewer in the default browser",
+    )
+    parser.add_argument(
+        "--forget-api-key",
+        action="store_true",
+        help="Remove the live-translation API key from the OS keyring and exit",
     )
     return parser
 
@@ -101,6 +107,13 @@ def create_serve_parser() -> argparse.ArgumentParser:
 def run_serve(argv: Sequence[str] | None = None) -> int:
     parser = create_serve_parser()
     args = parser.parse_args(argv)
+    if args.forget_api_key:
+        try:
+            KeyringCredentialStore().delete_api_key()
+        except CredentialStoreError as error:
+            parser.error(str(error))
+        print("Removed the live-translation API key from the operating-system keyring.")
+        return 0
     try:
         settings = load_server_settings(
             books_root=args.books_root,

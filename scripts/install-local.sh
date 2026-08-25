@@ -108,7 +108,48 @@ trap 'rm -f "$BINARY_TEMP" "$CONFIG_TEMP"' EXIT HUP INT TERM
 install -m 755 "$BINARY_PATH" "$BINARY_TEMP"
 mv "$BINARY_TEMP" "$INSTALLED_BINARY"
 umask 077
-printf 'books_root = "%s"\n' "$BOOKS_ROOT" > "$CONFIG_TEMP"
+if [ -f "$CONFIG_PATH" ]; then
+    awk -v books_root="$BOOKS_ROOT" '
+        BEGIN {
+            print "schema_version = 1"
+            in_root = 1
+            in_viewer = 0
+            saw_viewer = 0
+            wrote_books_root = 0
+        }
+        /^\[[^]]+\][[:space:]]*$/ {
+            if (in_viewer && !wrote_books_root) {
+                print "books_root = \"" books_root "\""
+                wrote_books_root = 1
+            }
+            in_root = 0
+            in_viewer = ($0 == "[viewer]")
+            if (in_viewer) saw_viewer = 1
+            print
+            next
+        }
+        in_root && /^[[:space:]]*(schema_version|books_root)[[:space:]]*=/ { next }
+        in_viewer && /^[[:space:]]*books_root[[:space:]]*=/ {
+            if (!wrote_books_root) {
+                print "books_root = \"" books_root "\""
+                wrote_books_root = 1
+            }
+            next
+        }
+        { print }
+        END {
+            if (in_viewer && !wrote_books_root) {
+                print "books_root = \"" books_root "\""
+            } else if (!saw_viewer) {
+                print ""
+                print "[viewer]"
+                print "books_root = \"" books_root "\""
+            }
+        }
+    ' "$CONFIG_PATH" > "$CONFIG_TEMP"
+else
+    printf 'schema_version = 1\n\n[viewer]\nbooks_root = "%s"\n' "$BOOKS_ROOT" > "$CONFIG_TEMP"
+fi
 mv "$CONFIG_TEMP" "$CONFIG_PATH"
 trap - EXIT HUP INT TERM
 
