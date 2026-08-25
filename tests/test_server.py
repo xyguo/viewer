@@ -207,7 +207,7 @@ def test_server_reports_unconfigured_live_translation(tmp_path: Path) -> None:
     with running_server(tmp_path, None) as (host, port):
         status, payload = post_json(host, port, "/api/translate", valid_payload())
     assert status == 503
-    assert "LLM_CHAT_COMPLETIONS_URL" in str(payload["error"])
+    assert "translation.chat_completions_url" in str(payload["error"])
 
 
 def test_server_serves_static_files_with_security_headers(tmp_path: Path) -> None:

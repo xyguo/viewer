@@ -1,0 +1,31 @@
+# Copy this file to the platform-specific config.toml path shown in the Settings panel,
+# or use that panel to create and edit the file. API keys never belong in this file.
+schema_version = 1
+
+[translation]
+chat_completions_url = "http://127.0.0.1:8080/v1/chat/completions"
+model = "provider-model-name"
+timeout_seconds = 90.0
+cache_items = 512
+
+[translation.auth]
+header = "Authorization"
+scheme = "Bearer"
+
+[translation.auth.extra_headers]
+# X-Client = "parallel-book-viewer"
+
+[translation.generation]
+temperature = 0.0
+max_tokens = 900
+
+# Tencent's Hy-MT2 model card recommends these sampling values for its 1.8B and 7B models:
+# temperature = 0.7
+# top_p = 0.6
+# top_k and repeat_penalty are llama.cpp-specific and may be rejected by the official OpenAI API.
+# top_k = 20
+# repeat_penalty = 1.05
+# max_tokens = 4096
+
+[translation.generation.extra_body]
+# Add provider-specific non-core request parameters here.

@@ -397,6 +397,43 @@ class ErrorResponse(StrictModel):
     error: str = Field(min_length=1)
 
 
+SettingsInputType = Literal["text", "number", "url", "password", "json", "path"]
+
+
+class SettingsField(StrictModel):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
+    label: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    note: str | None = Field(default=None, min_length=1)
+    group: str = Field(min_length=1)
+    input_type: SettingsInputType = Field(alias="inputType")
+    value: str | None = None
+    default_value: str | None = Field(default=None, alias="defaultValue")
+    is_set: bool = Field(alias="isSet")
+    sensitive: bool = False
+
+
+class SettingsDocument(StrictModel):
+    source: str = Field(min_length=1)
+    fields: list[SettingsField] = Field(min_length=1)
+    restart_required: bool = Field(default=False, alias="restartRequired")
+
+
+class SettingsUpdate(StrictModel):
+    values: dict[str, str | None] = Field(max_length=64)
+
+    @field_validator("values")
+    @classmethod
+    def validate_values(cls, values: dict[str, str | None]) -> dict[str, str | None]:
+        setting_name = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
+        for name, value in values.items():
+            if not setting_name.fullmatch(name):
+                raise ValueError("setting names must be valid dotted configuration paths")
+            if value is not None and (len(value) > 8_192 or "\r" in value or "\n" in value):
+                raise ValueError("setting values must be single-line and at most 8192 characters")
+        return values
+
+
 class ChatMessage(StrictModel):
     role: Literal["system", "user", "assistant"]
     content: str = Field(min_length=1)
@@ -406,7 +443,10 @@ class ChatCompletionRequest(StrictModel):
     model: str = Field(min_length=1)
     messages: list[ChatMessage] = Field(min_length=2)
     temperature: float = Field(default=0.0, ge=0, le=2)
+    top_p: float | None = Field(default=None, ge=0, le=1)
+    top_k: int | None = Field(default=None, ge=0)
     max_tokens: int = Field(default=900, ge=1)
+    repeat_penalty: float | None = Field(default=None, gt=0)
     stream: Literal[False] = False
 
 

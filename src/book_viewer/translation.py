@@ -81,7 +81,8 @@ class UnconfiguredTranslator:
     def translate(self, request: TranslationRequest) -> str:
         del request
         raise TranslationError(
-            "Live translation is not configured. Set LLM_CHAT_COMPLETIONS_URL and LLM_MODEL.",
+            "Live translation is not configured. Set translation.chat_completions_url "
+            "and translation.model in Settings.",
             HTTPStatus.SERVICE_UNAVAILABLE,
         )
 
@@ -106,9 +107,11 @@ class OpenAICompatibleTranslator:
 
     def translate(self, request: TranslationRequest) -> str:
         chat_request = self._create_chat_request(request)
+        payload = chat_request.model_dump(mode="json", exclude_none=True)
+        payload.update(self._settings.extra_body)
         upstream_request = urllib.request.Request(
             self._endpoint,
-            data=chat_request.model_dump_json().encode(),
+            data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(),
             headers=self._settings.request_headers(),
             method="POST",
         )
@@ -160,7 +163,10 @@ class OpenAICompatibleTranslator:
                 ChatMessage(role="user", content=request.sentence),
             ],
             temperature=self._settings.temperature,
+            top_p=self._settings.top_p,
+            top_k=self._settings.top_k,
             max_tokens=self._settings.max_tokens,
+            repeat_penalty=self._settings.repeat_penalty,
         )
 
     def _http_error(self, error: urllib.error.HTTPError) -> TranslationError:

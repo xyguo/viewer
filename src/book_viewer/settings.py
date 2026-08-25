@@ -1,27 +1,42 @@
-"""Strict environment-backed settings for the local viewer server."""
+"""Strict configuration for the local viewer server."""
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
 import tomllib
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import (
     AnyHttpUrl,
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     SecretStr,
     ValidationError,
     field_validator,
     model_validator,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .credentials import CredentialStore, CredentialStoreError, KeyringCredentialStore
 
 APP_DIRECTORY_NAME = "Parallel Book Viewer"
+CONFIG_SCHEMA_VERSION = 1
+HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+RESERVED_EXTRA_BODY_FIELDS = {
+    "max_tokens",
+    "messages",
+    "model",
+    "repeat_penalty",
+    "stream",
+    "temperature",
+    "top_k",
+    "top_p",
+}
 
 
 def _running_frozen() -> bool:
@@ -41,28 +56,6 @@ def _default_books_root(static_root: Path) -> Path:
 
 DEFAULT_STATIC_ROOT = _default_static_root()
 DEFAULT_BOOKS_ROOT = _default_books_root(DEFAULT_STATIC_ROOT)
-HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
-
-
-class ViewerConfig(BaseModel):
-    """Small persistent configuration written by the local installer."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    books_root: Path
-
-    @field_validator("books_root", mode="before")
-    @classmethod
-    def expand_books_root(cls, value: object) -> object:
-        if isinstance(value, str):
-            return Path(value).expanduser()
-        return value
-
-    @model_validator(mode="after")
-    def require_absolute_books_root(self) -> Self:
-        if not self.books_root.is_absolute():
-            raise ValueError("books_root must be an absolute path")
-        return self
 
 
 def default_config_path() -> Path:
@@ -93,99 +86,53 @@ def default_reader_data_path() -> Path:
     return data_home / "reader-data.sqlite3"
 
 
-def load_viewer_config() -> ViewerConfig | None:
-    """Load the installer-managed book-library configuration when present."""
+class ConfigModel(BaseModel):
+    """Strict base model for values persisted in config.toml."""
 
-    path = default_config_path().expanduser()
-    if not path.is_file():
-        return None
-    try:
-        with path.open("rb") as config_file:
-            values = tomllib.load(config_file)
-        return ViewerConfig.model_validate(values)
-    except (tomllib.TOMLDecodeError, ValidationError) as error:
-        raise ValueError(f"Invalid viewer configuration in {path}: {error}") from error
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
-class ServerSettings(BaseSettings):
-    """Runtime settings loaded from environment variables or explicit values."""
+class ViewerConfig(ConfigModel):
+    """Viewer paths and local HTTP server configuration."""
 
-    model_config = SettingsConfigDict(
-        case_sensitive=True,
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        frozen=True,
-        populate_by_name=True,
-        strict=True,
-    )
+    host: str = Field(default="127.0.0.1", min_length=1)
+    port: int = Field(default=8000, ge=0, le=65_535)
+    static_root: Path = DEFAULT_STATIC_ROOT
+    books_root: Path = DEFAULT_BOOKS_ROOT
+    data_path: Path = Field(default_factory=default_reader_data_path)
 
-    host: str = Field(default="127.0.0.1", validation_alias="VIEWER_HOST", min_length=1)
-    port: int = Field(default=8000, validation_alias="VIEWER_PORT", ge=0, le=65_535)
-    static_root: Path = Field(default=DEFAULT_STATIC_ROOT, validation_alias="VIEWER_STATIC_ROOT")
-    books_root: Path = Field(default=DEFAULT_BOOKS_ROOT, validation_alias="VIEWER_BOOKS_ROOT")
-    reader_data_path: Path = Field(
-        default_factory=default_reader_data_path,
-        validation_alias="VIEWER_DATA_PATH",
-    )
-    chat_completions_url: AnyHttpUrl | None = Field(
-        default=None,
-        validation_alias="LLM_CHAT_COMPLETIONS_URL",
-    )
-    chat_model: str | None = Field(
-        default=None,
-        validation_alias="LLM_MODEL",
-        min_length=1,
-        max_length=200,
-    )
-    api_key: SecretStr | None = Field(default=None, validation_alias="LLM_API_KEY")
-    api_key_header: str = Field(
-        default="Authorization",
-        validation_alias="LLM_API_KEY_HEADER",
-        pattern=r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
-    )
-    api_key_scheme: str = Field(default="Bearer", validation_alias="LLM_API_KEY_SCHEME")
-    extra_headers: dict[str, str] = Field(
-        default_factory=dict,
-        validation_alias="LLM_EXTRA_HEADERS",
-    )
-    temperature: float = Field(
-        default=0.0,
-        validation_alias="LLM_TEMPERATURE",
-        ge=0,
-        le=2,
-    )
-    max_tokens: int = Field(
-        default=900,
-        validation_alias="LLM_MAX_TOKENS",
-        ge=1,
-        le=100_000,
-    )
-    request_timeout_seconds: float = Field(
-        default=90.0,
-        validation_alias="TRANSLATION_TIMEOUT_SECONDS",
-        gt=0,
-        le=600,
-    )
-    translation_cache_items: int = Field(
-        default=512,
-        validation_alias="TRANSLATION_CACHE_ITEMS",
-        ge=1,
-        le=10_000,
-    )
-
-    @field_validator("host", "chat_model")
+    @field_validator("static_root", "books_root", "data_path", mode="before")
     @classmethod
-    def reject_surrounding_whitespace(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
+    def expand_paths(cls, value: object) -> object:
+        if isinstance(value, str):
+            return Path(value).expanduser()
+        return value
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, value: str) -> str:
         if value != value.strip():
             raise ValueError("must not have surrounding whitespace")
         return value
 
-    @field_validator("api_key_scheme")
+    @model_validator(mode="after")
+    def require_absolute_paths(self) -> Self:
+        for field_name in ("static_root", "books_root", "data_path"):
+            if not getattr(self, field_name).is_absolute():
+                raise ValueError(f"viewer.{field_name} must be an absolute path")
+        return self
+
+
+class TranslationAuthConfig(ConfigModel):
+    """Non-secret authentication metadata for the translation service."""
+
+    header: str = Field(default="Authorization", pattern=r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+    scheme: str = "Bearer"
+    extra_headers: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("scheme")
     @classmethod
-    def validate_api_key_scheme(cls, value: str) -> str:
+    def validate_scheme(cls, value: str) -> str:
         if value != value.strip() or "\r" in value or "\n" in value:
             raise ValueError("must be trimmed and must not contain line breaks")
         return value
@@ -207,18 +154,127 @@ class ServerSettings(BaseSettings):
             normalized_names.add(normalized_name)
         return values
 
+
+class GenerationConfig(ConfigModel):
+    """Sampling parameters sent to the OpenAI-compatible backend."""
+
+    temperature: float = Field(default=0.0, ge=0, le=2)
+    top_p: float | None = Field(default=None, ge=0, le=1)
+    top_k: int | None = Field(default=None, ge=0, le=100_000)
+    max_tokens: int = Field(default=900, ge=1, le=100_000)
+    repeat_penalty: float | None = Field(default=None, gt=0, le=100)
+    extra_body: dict[str, JsonValue] = Field(default_factory=dict)
+
+    @field_validator("extra_body")
+    @classmethod
+    def reject_core_request_overrides(
+        cls,
+        values: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        reserved = sorted(RESERVED_EXTRA_BODY_FIELDS.intersection(values))
+        if reserved:
+            raise ValueError(f"extra_body cannot override: {', '.join(reserved)}")
+        return values
+
+
+class TranslationConfig(ConfigModel):
+    """Translation backend, generation, timeout, and cache configuration."""
+
+    chat_completions_url: AnyHttpUrl | None = None
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+    timeout_seconds: float = Field(default=90.0, gt=0, le=600)
+    cache_items: int = Field(default=512, ge=1, le=10_000)
+    auth: TranslationAuthConfig = Field(default_factory=TranslationAuthConfig)
+    generation: GenerationConfig = Field(default_factory=GenerationConfig)
+
+    @field_validator("model")
+    @classmethod
+    def reject_untrimmed_model(cls, value: str | None) -> str | None:
+        if value is not None and value != value.strip():
+            raise ValueError("must not have surrounding whitespace")
+        return value
+
     @model_validator(mode="after")
-    def validate_backend_configuration(self) -> Self:
-        has_url = self.chat_completions_url is not None
-        has_model = self.chat_model is not None
-        if has_url != has_model:
-            raise ValueError("LLM_CHAT_COMPLETIONS_URL and LLM_MODEL must be configured together")
-        if not has_url and (self.api_key is not None or self.extra_headers):
-            raise ValueError("LLM authentication and headers require a configured backend")
-        if self.api_key is not None:
-            reserved_names = {name.casefold() for name in self.extra_headers}
-            if self.api_key_header.casefold() in reserved_names:
-                raise ValueError("LLM_API_KEY_HEADER must not duplicate an extra header")
+    def require_complete_backend(self) -> Self:
+        if (self.chat_completions_url is None) != (self.model is None):
+            raise ValueError(
+                "translation.chat_completions_url and translation.model must be configured together"
+            )
+        return self
+
+
+class ApplicationConfig(ConfigModel):
+    """Versioned config.toml document."""
+
+    schema_version: Literal[1] = CONFIG_SCHEMA_VERSION
+    viewer: ViewerConfig = Field(default_factory=ViewerConfig)
+    translation: TranslationConfig = Field(default_factory=TranslationConfig)
+
+
+class ServerSettings(ConfigModel):
+    """Immutable effective runtime settings loaded from config.toml and the keyring."""
+
+    config_path: Path = Field(default_factory=default_config_path, exclude=True)
+    host: str = Field(default="127.0.0.1", min_length=1)
+    port: int = Field(default=8000, ge=0, le=65_535)
+    static_root: Path = DEFAULT_STATIC_ROOT
+    books_root: Path = DEFAULT_BOOKS_ROOT
+    reader_data_path: Path = Field(default_factory=default_reader_data_path)
+    chat_completions_url: AnyHttpUrl | None = None
+    chat_model: str | None = Field(default=None, min_length=1, max_length=200)
+    api_key: SecretStr | None = Field(default=None, exclude=True)
+    api_key_header: str = Field(
+        default="Authorization",
+        pattern=r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+    )
+    api_key_scheme: str = "Bearer"
+    extra_headers: dict[str, str] = Field(default_factory=dict)
+    temperature: float = Field(default=0.0, ge=0, le=2)
+    top_p: float | None = Field(default=None, ge=0, le=1)
+    top_k: int | None = Field(default=None, ge=0, le=100_000)
+    max_tokens: int = Field(default=900, ge=1, le=100_000)
+    repeat_penalty: float | None = Field(default=None, gt=0, le=100)
+    extra_body: dict[str, JsonValue] = Field(default_factory=dict)
+    request_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
+    translation_cache_items: int = Field(default=512, ge=1, le=10_000)
+
+    @field_validator("host", "chat_model")
+    @classmethod
+    def reject_surrounding_whitespace(cls, value: str | None) -> str | None:
+        if value is not None and value != value.strip():
+            raise ValueError("must not have surrounding whitespace")
+        return value
+
+    @field_validator("api_key_scheme")
+    @classmethod
+    def validate_api_key_scheme(cls, value: str) -> str:
+        return TranslationAuthConfig.validate_scheme(value)
+
+    @field_validator("extra_headers")
+    @classmethod
+    def validate_extra_headers(cls, values: dict[str, str]) -> dict[str, str]:
+        return TranslationAuthConfig.validate_extra_headers(values)
+
+    @field_validator("extra_body")
+    @classmethod
+    def reject_core_request_overrides(
+        cls,
+        values: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        return GenerationConfig.reject_core_request_overrides(values)
+
+    @model_validator(mode="after")
+    def validate_settings(self) -> Self:
+        if (self.chat_completions_url is None) != (self.chat_model is None):
+            raise ValueError(
+                "translation.chat_completions_url and translation.model must be configured together"
+            )
+        normalized_headers = {name.casefold() for name in self.extra_headers}
+        if self.api_key_header.casefold() in normalized_headers:
+            raise ValueError("the API key header must not duplicate an extra header")
+        for field_name in ("static_root", "books_root", "reader_data_path"):
+            if not getattr(self, field_name).is_absolute():
+                raise ValueError(f"{field_name} must be an absolute path")
         return self
 
     @property
@@ -227,9 +283,7 @@ class ServerSettings(BaseSettings):
 
     @property
     def chat_completions_endpoint(self) -> str | None:
-        if self.chat_completions_url is None:
-            return None
-        return str(self.chat_completions_url)
+        return None if self.chat_completions_url is None else str(self.chat_completions_url)
 
     @property
     def translation_backend_identity(self) -> str:
@@ -249,18 +303,121 @@ class ServerSettings(BaseSettings):
         return headers
 
 
+def _upgrade_legacy_config(values: dict[str, object]) -> dict[str, object]:
+    """Accept the old installer-only top-level books_root during migration."""
+
+    if "books_root" not in values:
+        return values
+    upgraded = dict(values)
+    books_root = upgraded.pop("books_root")
+    viewer = upgraded.get("viewer")
+    if viewer is not None:
+        raise ValueError("books_root is configured both at the top level and under viewer")
+    upgraded["viewer"] = {"books_root": books_root}
+    upgraded.setdefault("schema_version", CONFIG_SCHEMA_VERSION)
+    return upgraded
+
+
+def load_application_config(path: Path) -> ApplicationConfig:
+    """Read and validate one config.toml document, or return defaults when absent."""
+
+    selected_path = path.expanduser()
+    if selected_path.is_symlink():
+        raise ValueError(f"Viewer configuration must not be a symbolic link: {selected_path}")
+    if not selected_path.exists():
+        return ApplicationConfig()
+    try:
+        with selected_path.open("rb") as config_file:
+            values = tomllib.load(config_file)
+        return ApplicationConfig.model_validate(_upgrade_legacy_config(values))
+    except (OSError, tomllib.TOMLDecodeError, ValidationError) as error:
+        raise ValueError(f"Invalid viewer configuration in {selected_path}: {error}") from error
+
+
+def application_config_from_settings(settings: ServerSettings) -> ApplicationConfig:
+    """Create the canonical persisted document from effective runtime settings."""
+
+    return ApplicationConfig(
+        viewer=ViewerConfig(
+            host=settings.host,
+            port=settings.port,
+            static_root=settings.static_root,
+            books_root=settings.books_root,
+            data_path=settings.reader_data_path,
+        ),
+        translation=TranslationConfig(
+            chat_completions_url=settings.chat_completions_url,
+            model=settings.chat_model,
+            timeout_seconds=settings.request_timeout_seconds,
+            cache_items=settings.translation_cache_items,
+            auth=TranslationAuthConfig(
+                header=settings.api_key_header,
+                scheme=settings.api_key_scheme,
+                extra_headers=settings.extra_headers,
+            ),
+            generation=GenerationConfig(
+                temperature=settings.temperature,
+                top_p=settings.top_p,
+                top_k=settings.top_k,
+                max_tokens=settings.max_tokens,
+                repeat_penalty=settings.repeat_penalty,
+                extra_body=settings.extra_body,
+            ),
+        ),
+    )
+
+
+def server_settings_from_config(
+    config: ApplicationConfig,
+    path: Path,
+    api_key: str | None,
+) -> ServerSettings:
+    """Combine validated non-secret configuration with a separately stored secret."""
+
+    translation = config.translation
+    return ServerSettings(
+        config_path=path,
+        host=config.viewer.host,
+        port=config.viewer.port,
+        static_root=config.viewer.static_root,
+        books_root=config.viewer.books_root,
+        reader_data_path=config.viewer.data_path,
+        chat_completions_url=translation.chat_completions_url,
+        chat_model=translation.model,
+        api_key=None if api_key is None else SecretStr(api_key),
+        api_key_header=translation.auth.header,
+        api_key_scheme=translation.auth.scheme,
+        extra_headers=translation.auth.extra_headers,
+        temperature=translation.generation.temperature,
+        top_p=translation.generation.top_p,
+        top_k=translation.generation.top_k,
+        max_tokens=translation.generation.max_tokens,
+        repeat_penalty=translation.generation.repeat_penalty,
+        extra_body=translation.generation.extra_body,
+        request_timeout_seconds=translation.timeout_seconds,
+        translation_cache_items=translation.cache_items,
+    )
+
+
 def load_server_settings(
     *,
     books_root: Path | None = None,
+    config_path: Path | None = None,
+    credential_store: CredentialStore | None = None,
 ) -> ServerSettings:
-    """Load settings with CLI, environment, saved library, then default precedence."""
+    """Load config.toml plus the API key, with an optional temporary library override."""
 
+    selected_path = (config_path or default_config_path()).expanduser()
+    if not selected_path.is_absolute():
+        selected_path = (Path.cwd() / selected_path).resolve()
+    config = load_application_config(selected_path)
+    credentials = credential_store or KeyringCredentialStore()
+    try:
+        api_key = credentials.read_api_key()
+    except CredentialStoreError as error:
+        logging.warning("Could not read the translation API key from the OS keyring: %s", error)
+        api_key = None
+    settings = server_settings_from_config(config, selected_path, api_key)
     if books_root is not None:
-        return ServerSettings(books_root=books_root.expanduser().resolve())
-    environment_settings = ServerSettings()
-    if "books_root" in environment_settings.model_fields_set:
-        return environment_settings
-    config = load_viewer_config()
-    if config is not None:
-        return environment_settings.model_copy(update={"books_root": config.books_root})
-    return environment_settings
+        settings = settings.model_copy(update={"books_root": books_root.expanduser().resolve()})
+    return settings

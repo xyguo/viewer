@@ -73,7 +73,11 @@ def test_chat_request_uses_context_without_authorization(tmp_path: Path) -> None
         chat_model="configured-model",
         request_timeout_seconds=12.5,
         temperature=0.25,
+        top_p=0.6,
+        top_k=20,
         max_tokens=700,
+        repeat_penalty=1.05,
+        extra_body={"seed": 42},
     )
     opener = FakeUrlOpen(
         FakeResponse({"choices": [{"message": {"role": "assistant", "content": "Translated."}}]})
@@ -97,7 +101,12 @@ def test_chat_request_uses_context_without_authorization(tmp_path: Path) -> None
     assert "次の文です。" in payload["messages"][0]["content"]
     assert payload["stream"] is False
     assert payload["temperature"] == 0.25
+    assert payload["top_p"] == 0.6
+    assert payload["top_k"] == 20
     assert payload["max_tokens"] == 700
+    assert payload["repeat_penalty"] == 1.05
+    assert payload["seed"] == 42
+    assert "max_completion_tokens" not in payload
 
 
 def test_chat_request_supports_remote_provider_authentication(tmp_path: Path) -> None:
@@ -118,6 +127,28 @@ def test_chat_request_supports_remote_provider_authentication(tmp_path: Path) ->
     assert upstream_request.full_url == "https://provider.example/chat/completions"
     assert upstream_request.get_header("Authorization") == "Bearer secret"
     assert upstream_request.get_header("X-provider-feature") == "enabled"
+
+
+def test_chat_request_omits_unset_optional_generation_parameters(tmp_path: Path) -> None:
+    opener = FakeUrlOpen(
+        FakeResponse({"choices": [{"message": {"role": "assistant", "content": "Done."}}]})
+    )
+    translator = OpenAICompatibleTranslator(
+        ServerSettings(
+            static_root=tmp_path,
+            chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
+            chat_model="model",
+        ),
+        urlopen=opener,
+    )
+
+    assert translator.translate(translation_request()) == "Done."
+    upstream_request, _timeout = opener.requests[0]
+    assert isinstance(upstream_request.data, bytes)
+    payload = json.loads(upstream_request.data)
+    assert "top_p" not in payload
+    assert "top_k" not in payload
+    assert "repeat_penalty" not in payload
 
 
 def test_chat_client_rejects_invalid_response(tmp_path: Path) -> None:
