@@ -32,6 +32,15 @@ script manually:
 scripts/install-local.sh
 ```
 
+Remove a per-user installation with:
+
+```sh
+scripts/uninstall-local.sh
+```
+
+The uninstaller never removes the book library and preserves reading history unless you choose
+to delete it.
+
 ### Dependencies
 
 - **Python 3.12 or newer and uv:** run the source server, install its small Python dependency set, and execute the book-building tools. Neither is required by the standalone executable.
@@ -47,7 +56,9 @@ Except for the small tracked `books/example/` package, book source files, transl
 
 When using `book-viewer-serve`, the server discovers built books and creates the library catalog in memory for every catalog request. Refresh the library page after adding or rebuilding a book; restarting the server is unnecessary. The generated `books/catalog.js` file remains available for opening or hosting the static viewer without the Python server.
 
-The reader stores each book's last-opened time and reading position in the browser's local storage. Recently opened books appear first in the library, and reopening a book resumes at its saved position. This history stays in the current browser profile and is not synchronized between browsers or devices.
+The reader stores each book's last-opened time and reading position locally on this computer.
+Recently opened books appear first in the library, and reopening a book resumes at its saved
+position even when using another browser or local server address.
 
 ## Live translation
 

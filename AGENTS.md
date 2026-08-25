@@ -8,13 +8,13 @@ Parallel Book Viewer is a lightweight static reader with a small typed Python se
 
 ## Project layout
 
-- `index.html`, `bootstrap.js`, `app.js`, and `styles.css`: generic catalog and reader frontend.
-- `src/book_viewer/`: strict Pydantic models, book builder, library discovery, settings, translation client, MathJax installer, HTTP server, and command-line entry points.
+- `index.html`, `bootstrap.js`, `preferences.js`, `app.js`, and `styles.css`: generic catalog and reader frontend.
+- `src/book_viewer/`: strict Pydantic models, book builder, library discovery, versioned reader-data persistence, syntax-highlighting extensions, settings, translation client, MathJax installer, HTTP server, and command-line entry points.
 - `schemas/book.schema.json`: generated, tracked manifest contract.
 - `tests/`: Python, HTTP, frontend-contract, and project-skill tests.
 - `scripts/check.sh`: complete quality gate used locally and by pre-commit.
-- `scripts/build-binary.sh`, `scripts/install-local.sh`, and `book-viewer.spec`: standalone
-  executable build and per-user installation.
+- `scripts/build-binary.sh`, `scripts/install-local.sh`, `scripts/uninstall-local.sh`, and
+  `book-viewer.spec`: standalone executable build and per-user installation.
 - `.agent/skills/create-viewer-book/`: canonical agent workflow for creating and updating book packages.
 - `docs/assets/`: tracked images used by repository documentation.
 - `books/`: ignored external library. `books/.gitkeep` and the complete `books/example/` fixture are tracked.
@@ -27,6 +27,26 @@ Use `.agent/skills/create-viewer-book/` whenever work creates, translates, rebui
 Treat `src/book_viewer/models.py`, `schemas/book.schema.json`, and `src/book_viewer/builder.py` as the application authority. `book.json` must declare the supported `schema_version`. Generated catalogs, chapter indexes, and chapter payloads carry that version, and the viewer rejects incompatible data.
 
 Generated `document-data.js`, `document-data-chunks/`, per-book `catalog.js`, and the library-level `books/catalog.js` are build outputs. Correct source Markdown, target Markdown, assets, manifests, or builder code and regenerate them instead of editing generated JavaScript. The local server discovers built books and serializes its catalog in memory on every `/books/catalog.js` request; the generated catalog files remain the static and portable fallbacks.
+
+Pandoc provides highlighting for its supported languages. Put custom language tokenizers under
+`src/book_viewer/syntax_highlighting/` and keep them out of the general builder.
+
+## Reader-data contracts
+
+- **Book slug**: stable reader-wide book identity across rebuilds and library relocation.
+- **Reading state**: the single replaceable resumable location, progress, and activity time for a book.
+- **Annotation**: a future independently identified bookmark, note, highlight, or underline; annotations are not reading state.
+
+`preferences.js` keeps browser storage as a fallback and synchronizes reading state through the
+local server. `src/book_viewer/reader_data.py` owns the per-user SQLite database. Extend its schema
+with a new numbered migration, leaving applied migrations unchanged; add future annotation data
+in separate tables with stable identities.
+
+## Local installation contracts
+
+Install the executable in `~/.local/bin`; keep the installer-managed book-library setting private.
+Expose temporary library overrides only through `--books-root` and `VIEWER_BOOKS_ROOT`. Uninstall
+the executable and saved setting while preserving books unconditionally and reader data by default.
 
 When deliberately changing `BookManifest`, regenerate the tracked schema:
 
