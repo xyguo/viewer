@@ -124,7 +124,6 @@ def test_default_saved_config_selects_books_root(
     tmp_path: Path,
 ) -> None:
     monkeypatch.delenv("VIEWER_BOOKS_ROOT", raising=False)
-    monkeypatch.delenv("VIEWER_CONFIG_FILE", raising=False)
     config_path = tmp_path / "config.toml"
     books_root = tmp_path / "my library"
     config_path.write_text(f'books_root = "{books_root}"\n', encoding="utf-8")
@@ -138,7 +137,7 @@ def test_default_saved_config_selects_books_root(
     assert settings.books_root == books_root
 
 
-def test_books_root_precedence_is_cli_then_environment_then_dotenv_then_config(
+def test_books_root_precedence_is_cli_then_environment_then_dotenv_then_saved_library(
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -153,35 +152,31 @@ def test_books_root_precedence_is_cli_then_environment_then_dotenv_then_config(
         f"VIEWER_BOOKS_ROOT={dotenv_root}\n",
         encoding="utf-8",
     )
+    monkeypatch.setattr(settings_module, "default_config_path", lambda: config_path)
 
-    assert load_server_settings(config_path=config_path).books_root == dotenv_root
+    assert load_server_settings().books_root == dotenv_root
 
     monkeypatch.setenv("VIEWER_BOOKS_ROOT", str(environment_root))
 
-    assert load_server_settings(config_path=config_path).books_root == environment_root
+    assert load_server_settings().books_root == environment_root
     assert (
         load_server_settings(
-            config_path=config_path,
             books_root=command_line_root,
         ).books_root
         == command_line_root
     )
 
 
-def test_config_path_environment_and_config_errors(
+def test_missing_saved_config_and_invalid_saved_config(
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    config_path = tmp_path / "config.toml"
-    books_root = tmp_path / "library"
-    config_path.write_text(f'books_root = "{books_root}"\n', encoding="utf-8")
-    monkeypatch.setenv("VIEWER_CONFIG_FILE", str(config_path))
-    assert load_viewer_config() is not None
-
-    with pytest.raises(FileNotFoundError, match="does not exist"):
-        load_viewer_config(tmp_path / "missing.toml")
+    missing_path = tmp_path / "missing.toml"
+    monkeypatch.setattr(settings_module, "default_config_path", lambda: missing_path)
+    assert load_viewer_config() is None
 
     invalid_path = tmp_path / "invalid.toml"
     invalid_path.write_text('books_root = "relative/path"\n', encoding="utf-8")
+    monkeypatch.setattr(settings_module, "default_config_path", lambda: invalid_path)
     with pytest.raises(ValueError, match="absolute path"):
-        load_viewer_config(invalid_path)
+        load_viewer_config()

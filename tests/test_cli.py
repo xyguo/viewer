@@ -102,7 +102,7 @@ def test_run_serve_passes_command_line_options(
     assert cli.run_serve(["--books-root", str(books_root), "--no-open"]) == 0
 
 
-def test_run_serve_reports_invalid_config(tmp_path: Path) -> None:
+def test_run_serve_has_no_public_config_path_option(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exit_info:
         cli.run_serve(["--config", str(tmp_path / "missing.toml")])
     assert exit_info.value.code == 2

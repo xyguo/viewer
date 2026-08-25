@@ -22,7 +22,6 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_DIRECTORY_NAME = "Parallel Book Viewer"
-CONFIG_ENVIRONMENT_VARIABLE = "VIEWER_CONFIG_FILE"
 
 
 def _running_frozen() -> bool:
@@ -94,16 +93,11 @@ def default_reader_data_path() -> Path:
     return data_home / "reader-data.sqlite3"
 
 
-def load_viewer_config(config_path: Path | None = None) -> ViewerConfig | None:
-    """Load a strict optional user configuration file."""
+def load_viewer_config() -> ViewerConfig | None:
+    """Load the installer-managed book-library configuration when present."""
 
-    configured_path = os.environ.get(CONFIG_ENVIRONMENT_VARIABLE)
-    selected_path = config_path or (Path(configured_path) if configured_path else None)
-    is_explicit = selected_path is not None
-    path = (selected_path or default_config_path()).expanduser()
+    path = default_config_path().expanduser()
     if not path.is_file():
-        if is_explicit:
-            raise FileNotFoundError(f"Viewer configuration file does not exist: {path}")
         return None
     try:
         with path.open("rb") as config_file:
@@ -257,17 +251,16 @@ class ServerSettings(BaseSettings):
 
 def load_server_settings(
     *,
-    config_path: Path | None = None,
     books_root: Path | None = None,
 ) -> ServerSettings:
-    """Load server settings with CLI, environment, config, then default precedence."""
+    """Load settings with CLI, environment, saved library, then default precedence."""
 
     if books_root is not None:
         return ServerSettings(books_root=books_root.expanduser().resolve())
     environment_settings = ServerSettings()
     if "books_root" in environment_settings.model_fields_set:
         return environment_settings
-    config = load_viewer_config(config_path)
+    config = load_viewer_config()
     if config is not None:
         return environment_settings.model_copy(update={"books_root": config.books_root})
     return environment_settings

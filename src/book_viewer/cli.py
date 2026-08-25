@@ -87,12 +87,7 @@ def create_serve_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--books-root",
         type=Path,
-        help="Book library directory; overrides VIEWER_BOOKS_ROOT and the saved config",
-    )
-    parser.add_argument(
-        "--config",
-        type=Path,
-        help="Viewer config file; defaults to the platform-specific user config",
+        help="Book library; temporarily overrides VIEWER_BOOKS_ROOT and the saved library",
     )
     parser.add_argument(
         "--no-open",
@@ -107,7 +102,6 @@ def run_serve(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         settings = load_server_settings(
-            config_path=args.config,
             books_root=args.books_root,
         )
     except (OSError, ValueError) as error:
