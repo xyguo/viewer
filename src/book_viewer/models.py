@@ -92,7 +92,7 @@ class BookManifest(StrictModel):
     reader_title: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1, max_length=500)
     source: EditionManifest
-    target: EditionManifest
+    target: EditionManifest | None = None
     data_file: str = Field(default="document-data.js", min_length=1)
     asset_rewrites: dict[str, str] = Field(default_factory=dict)
     mathjax: MathJaxManifest = Field(default_factory=MathJaxManifest)
@@ -124,7 +124,9 @@ class BookManifest(StrictModel):
     def source_path(self, manifest_path: Path) -> Path:
         return (manifest_path.parent / self.source.markdown).resolve()
 
-    def target_path(self, manifest_path: Path) -> Path:
+    def target_path(self, manifest_path: Path) -> Path | None:
+        if self.target is None:
+            return None
         return (manifest_path.parent / self.target.markdown).resolve()
 
     def output_path(self, manifest_path: Path) -> Path:
@@ -197,13 +199,13 @@ class ReadingStateCollection(BrowserModel):
 
 
 class BookChapter(BrowserModel):
-    """Metadata for one independently loadable aligned chapter."""
+    """Metadata for one independently loadable source or bilingual chapter."""
 
     id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     source_title: str = Field(min_length=1, max_length=300)
-    target_title: str = Field(min_length=1, max_length=300)
+    target_title: str | None = Field(default=None, min_length=1, max_length=300)
     source_data_file: str = Field(min_length=1)
-    target_data_file: str = Field(min_length=1)
+    target_data_file: str | None = Field(default=None, min_length=1)
     segment_ids: list[str] = Field(min_length=1)
 
     @field_validator("segment_ids")
@@ -214,6 +216,14 @@ class BookChapter(BrowserModel):
         if any(not value or value != value.strip() for value in values):
             raise ValueError("chapter segment IDs must be non-empty and trimmed")
         return values
+
+    @model_validator(mode="after")
+    def require_complete_target_metadata(self) -> Self:
+        if (self.target_title is None) != (self.target_data_file is None):
+            raise ValueError(
+                "target title and data file must either both be present or both be absent"
+            )
+        return self
 
 
 class TocEntry(BrowserModel):
@@ -236,9 +246,10 @@ class BookDocumentPayload(BrowserModel):
     source_language: str
     source_label: str
     source_html_lang: str
-    target_language: str
-    target_label: str
-    target_html_lang: str
+    has_offline_translation: bool = True
+    target_language: str | None = None
+    target_label: str | None = None
+    target_html_lang: str | None = None
     segment_count: int = Field(ge=1)
     initial_chapter_id: str
     chapters: list[BookChapter] = Field(min_length=1)
@@ -248,6 +259,17 @@ class BookDocumentPayload(BrowserModel):
 
     @model_validator(mode="after")
     def validate_chapter_index(self) -> BookDocumentPayload:
+        target_metadata = (self.target_language, self.target_label, self.target_html_lang)
+        if self.has_offline_translation:
+            if any(value is None for value in target_metadata):
+                raise ValueError("offline translations require complete target metadata")
+            if any(chapter.target_data_file is None for chapter in self.chapters):
+                raise ValueError("offline translations require target data for every chapter")
+        elif any(value is not None for value in target_metadata) or any(
+            chapter.target_data_file is not None for chapter in self.chapters
+        ):
+            raise ValueError("source-only books must not declare offline target metadata")
+
         chapter_ids = [chapter.id for chapter in self.chapters]
         if len(chapter_ids) != len(set(chapter_ids)):
             raise ValueError("chapter IDs must be unique")
@@ -288,6 +310,7 @@ class BuildResult(StrictModel):
     output_path: Path
     segment_count: int = Field(ge=1)
     chapter_count: int = Field(ge=1)
+    has_offline_translation: bool = True
 
 
 class CatalogEntry(BrowserModel):

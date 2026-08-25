@@ -105,6 +105,45 @@ def test_build_book_generates_validated_browser_data(tmp_path: Path) -> None:
     assert target_payload["language"] == "target"
 
 
+def test_build_book_accepts_segmented_source_without_translation(tmp_path: Path) -> None:
+    manifest_path = write_test_book(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.pop("target")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "target.md").unlink()
+    chunk_dir = tmp_path / "document-data-chunks"
+    chunk_dir.mkdir()
+    stale_target = chunk_dir / "001-target.js"
+    stale_target.write_text("stale", encoding="utf-8")
+
+    result = builder.build_book(
+        manifest_path,
+        renderer=lambda _markdown: segment_html("s1", "源"),
+        generated_at=datetime(2026, 8, 23, 12, 0, tzinfo=UTC),
+    )
+
+    payload = json.loads(
+        result.output_path.read_text(encoding="utf-8")
+        .removeprefix("window.BOOK_VIEWER_DOCUMENT = ")
+        .removesuffix(";\n")
+    )
+    assert result.has_offline_translation is False
+    assert payload["hasOfflineTranslation"] is False
+    assert payload["targetLanguage"] is None
+    assert payload["chapters"] == [
+        {
+            "id": "s1",
+            "sourceTitle": "源",
+            "targetTitle": None,
+            "sourceDataFile": "books/example-book/document-data-chunks/001-source.js",
+            "targetDataFile": None,
+            "segmentIds": ["s1"],
+        }
+    ]
+    assert (chunk_dir / "001-source.js").is_file()
+    assert not stale_target.exists()
+
+
 def test_build_book_splits_chapters_and_removes_stale_chunks(tmp_path: Path) -> None:
     manifest_path = write_test_book(tmp_path)
     chunk_dir = tmp_path / "document-data-chunks"

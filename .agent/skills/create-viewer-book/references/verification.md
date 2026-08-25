@@ -9,17 +9,16 @@ Run commands from the viewer repository root. Use the project-specific uv enviro
 Verify that these exist:
 
 - `books/<slug>/book.json`
-- the manifest's source and target Markdown paths
-- every local asset referenced by either Markdown file
+- the manifest's source Markdown path and optional target Markdown path
+- every local asset referenced by the available Markdown files
 - Pandoc on `PATH`
 
-Before building, mechanically compare source and target:
+Before building, mechanically validate that source segment IDs and equation tags are unique and that no placeholder or unfinished markers remain. For an offline edition, also compare source and target:
 
 - ordered segment IDs are identical and unique;
 - top-level heading boundaries correspond;
 - `\tag{...}` sequences are identical and unique;
-- figure paths and order are identical;
-- no placeholder or unfinished markers remain.
+- figure paths and order are identical.
 
 ## Build
 
@@ -52,13 +51,13 @@ UV_CACHE_DIR=.uv-cache uv run book-viewer-serve
 
 Verify observable behavior:
 
-1. The catalog lists the new title with correct source and target labels.
+1. The catalog lists the new title with its source label and optional target label.
 2. Opening the card loads the expected first chapter and segment count.
-3. Chapter buttons and table-of-contents links load corresponding source and target chapters.
+3. Chapter buttons and table-of-contents links load the corresponding source chapter and optional target chapter.
 4. Representative inline and display mathematics render, including explicit equation numbers.
 5. Representative figures load at nonzero dimensions.
-6. Clicking a sentence highlights the same ID on both sides and aligns its counterpart.
-7. One-language mode shows the mapped counterpart popup.
+6. Clicking a source sentence requests live translation in a source-only book.
+7. Offline mode is disabled for a source-only book. For an offline edition, clicking a sentence aligns its counterpart and one-language mode shows the mapped popup.
 8. The browser console has no new errors caused by the book.
 
 For large books, smoke-test the beginning, a middle chapter with formulas and figures, and the final chapter or bibliography. Deep-link at least one noninitial segment.
@@ -69,8 +68,8 @@ The task is complete only when:
 
 - the original document has full accounted coverage;
 - `source.md` is a faithful transcription;
-- `target.md` is a faithful one-to-one translation;
-- the builder reports aligned segment and chapter counts;
+- `target.md`, when requested, is a faithful one-to-one translation;
+- the builder reports segment and chapter counts;
 - all current manifests validate;
 - the repository quality gate passes when code or tracked contracts changed;
 - the browser smoke test passes, or the exact unavailable check is reported;

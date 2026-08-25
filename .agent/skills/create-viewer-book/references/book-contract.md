@@ -19,7 +19,7 @@ Repository code wins if an example in this skill has become stale.
 books/<slug>/
 |-- book.json
 |-- source.md
-|-- target.md
+|-- target.md                        optional offline translation
 |-- catalog.js                       generated one-book catalog
 |-- assets/
 |   `-- figures/
@@ -27,7 +27,7 @@ books/<slug>/
 |-- document-data.js                 generated
 `-- document-data-chunks/            generated
     |-- 001-source.js
-    |-- 001-target.js
+    |-- 001-target.js                present with an offline translation
     `-- ...
 ```
 
@@ -72,6 +72,8 @@ Use the schema version and constraints currently declared by `schemas/book.schem
 
 Use a lowercase hyphenated slug. Use valid BCP 47 values for `html_lang`, human-readable labels for controls, and distinct lowercase HTML ID prefixes. Add only MathJax packages and macros the document needs.
 
+For a source-only book, omit the entire `target` object and do not create `target.md`. The builder then emits source chunks only, and the reader enables live translation while disabling offline mode. Include `target` only when its Markdown file is a complete aligned offline edition.
+
 Write `description` as a short account of the book's subject matter. Do not repeat the source and target languages, sentence alignment, viewer format, file provenance, or other presentation details already shown elsewhere on the library card.
 
 ## Metadata compatibility
@@ -92,7 +94,7 @@ The builder renders with Pandoc using GitHub-flavored Markdown, dollar-delimited
 
 ### Segments
 
-The ordered `data-seg` values are the sentence mapping contract:
+The ordered source `data-seg` values are the sentence navigation and live-translation contract:
 
 ```markdown
 <span class="segment" data-seg="EX-p012-0007">A source sentence.</span>
@@ -102,14 +104,14 @@ The ordered `data-seg` values are the sentence mapping contract:
 <span class="segment" data-seg="EX-p012-0007">Its faithful translation.</span>
 ```
 
-Required invariants:
+Required source invariants:
 
-- Source and target contain the same IDs in exactly the same order.
 - IDs are non-empty and unique across the whole book.
 - Each segment is approximately one sentence. A heading, caption, list item, table cell, short footnote, or other indivisible visible unit may be one segment.
-- Translation preserves the segment boundary. One source segment maps to one target segment, even when the target language would naturally split or merge the sentence.
 - Segment spans contain inline content. Keep block structures such as paragraphs, lists, tables, and display equations outside the span wrapper.
 - Give every visible translatable unit a segment ID. Do not use an unsegmented paragraph as a workaround for difficult alignment.
+
+For an offline edition, source and target must contain the same IDs in exactly the same order. Translation preserves every segment boundary: one source segment maps to one target segment even when the target language would naturally split or merge the sentence.
 
 For paginated input, prefer IDs such as `<PREFIX>-p<page>-<ordinal>`, with zero-padded ordinals. For non-paginated input, use a stable structural form such as `<PREFIX>-c<chapter>-<ordinal>`. Once assigned, preserve IDs through corrections so existing links remain valid.
 
@@ -117,7 +119,7 @@ Use mechanical sentence boundaries: ordinary sentence-final punctuation such as 
 
 ### Structure and chapters
 
-Preserve corresponding Markdown heading levels in both editions. Every top-level `#` heading starts an independently loadable viewer chapter, so source and target must have the same top-level chapter boundaries and order. Put the heading text itself inside its segment:
+Preserve the source Markdown heading levels. Every top-level `#` heading starts an independently loadable viewer chapter. For an offline edition, source and target must have the same top-level chapter boundaries, levels, and order. Put the heading text itself inside its segment:
 
 ```markdown
 # <span class="segment" data-seg="EX-p001-0001">Chapter 1</span>
@@ -127,9 +129,9 @@ Use `##`, `###`, and `####` for lower levels as the source structure requires. T
 
 ### Mathematics
 
-Preserve inline and display mathematics as LaTeX. Keep mathematical identifiers, operators, delimiters, cases, arrays, and references structurally equivalent between editions. Translate prose inside `\text{...}` when it belongs to the surrounding language.
+Preserve inline and display mathematics as LaTeX. For an offline edition, keep mathematical identifiers, operators, delimiters, cases, arrays, and references structurally equivalent between editions. Translate prose inside `\text{...}` when it belongs to the surrounding language.
 
-Explicit equation numbers must use `\tag{...}` in both files, in identical order:
+Explicit equation numbers must use `\tag{...}`. For an offline edition, keep them in both files in identical order:
 
 ```markdown
 $$
@@ -155,7 +157,7 @@ The viewer provides lightweight syntax colors and line numbers for C (`c`), C++ 
 
 ### Figures and other assets
 
-Store assets under the book directory and reference them with the same path and order in both editions:
+Store assets under the book directory. For an offline edition, reference them with the same path and order in both editions:
 
 ```markdown
 ![Source-language caption](assets/figures/EX-p012-fig-1.png)
@@ -167,10 +169,10 @@ The alt text may be translated, but the image path must be identical. Keep the v
 
 ## Generated metadata
 
-`book-viewer-build` validates the manifest and Markdown, renders both editions, splits at top-level headings, and writes the browser payloads. Never edit these directly:
+`book-viewer-build` validates the manifest and Markdown, renders the source and optional target, splits at top-level headings, and writes the browser payloads. Never edit these directly:
 
 - `document-data.js`: book metadata, table of contents, chapter index, segment index, and MathJax configuration.
-- `document-data-chunks/*.js`: source and target HTML for lazily loaded chapters.
+- `document-data-chunks/*.js`: source HTML and, when present, target HTML for lazily loaded chapters.
 - `catalog.js`: a portable one-entry catalog for opening the book without a library catalog.
 - `books/catalog.js`: static catalog of all currently valid, built books. The local server discovers books and serializes this catalog in memory on every catalog request, so a library-page refresh sees newly built books without a server restart.
 

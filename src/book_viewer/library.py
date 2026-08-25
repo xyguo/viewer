@@ -44,10 +44,11 @@ def load_local_book(manifest_path: Path) -> LocalBook:
         raise ValueError(
             f"Book slug '{manifest.slug}' must match directory '{resolved_path.parent.name}'."
         )
-    for edition_name, markdown_path in (
-        ("source", manifest.source_path(resolved_path)),
-        ("target", manifest.target_path(resolved_path)),
-    ):
+    markdown_paths = [("source", manifest.source_path(resolved_path))]
+    target_path = manifest.target_path(resolved_path)
+    if target_path is not None:
+        markdown_paths.append(("target", target_path))
+    for edition_name, markdown_path in markdown_paths:
         if not markdown_path.is_file():
             raise FileNotFoundError(
                 f"The {edition_name} Markdown file does not exist: {markdown_path}"
@@ -73,7 +74,7 @@ def _catalog_entry(local_book: LocalBook) -> CatalogEntry:
         title=manifest.title,
         description=manifest.description,
         source_label=manifest.source.label,
-        target_label=manifest.target.label,
+        target_label=manifest.target.label if manifest.target is not None else None,
         data_file=browser_path,
     )
 

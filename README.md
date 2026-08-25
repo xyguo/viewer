@@ -50,7 +50,8 @@ to delete it.
 
 ## Add a book
 
-Create a `books/` folder in the repository and put the PDF you want to read in it. Then point an AI agent at the repository and ask it to use the project skill at `.agent/skills/create-viewer-book` to convert the PDF into the format accepted by the viewer.
+Create a `books/` folder in the repository and put the document (PDF/EPUB/...) you want to read in it. Then point an AI agent (e.g. Claude/Codex) at the repository and ask it to use the project skill at `.agent/skills/create-viewer-book` to convert the PDF into the format accepted by the viewer. Roughly speeking, the skill tells the agent to extract text from the input
+document, segment it to sentence level, and save it as a markdown that will later be converted to html for rendering. You can optionally ask the agent to also translate the document to another language.
 
 Except for the small tracked `books/example/` package, book source files, translations, metadata, generated browser data, and assets under `books/` remain local and are intentionally excluded from Git.
 

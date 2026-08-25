@@ -5,9 +5,9 @@ type ReaderView = "both" | ReaderLanguage;
 interface BookChapter {
   id: string;
   sourceTitle: string;
-  targetTitle: string;
+  targetTitle?: string | null;
   sourceDataFile: string;
-  targetDataFile: string;
+  targetDataFile?: string | null;
   segmentIds: string[];
 }
 
@@ -27,9 +27,10 @@ interface BookDocument {
   sourceLanguage: string;
   sourceLabel: string;
   sourceHtmlLang: string;
-  targetLanguage: string;
-  targetLabel: string;
-  targetHtmlLang: string;
+  hasOfflineTranslation?: boolean;
+  targetLanguage?: string | null;
+  targetLabel?: string | null;
+  targetHtmlLang?: string | null;
   segmentCount: number;
   initialChapterId: string;
   chapters: BookChapter[];

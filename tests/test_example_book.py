@@ -36,6 +36,7 @@ def test_tracked_example_is_a_complete_current_book_package() -> None:
 
     rendered_html: list[str] = []
     for chapter in document.chapters:
+        assert chapter.target_data_file is not None
         for language, data_file in (
             ("source", chapter.source_data_file),
             ("target", chapter.target_data_file),

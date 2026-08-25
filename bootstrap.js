@@ -150,10 +150,12 @@
     number.textContent = String(index + 1).padStart(2, "0");
     topline.append(number);
 
-    if (entry.sourceLabel && entry.targetLabel) {
+    if (entry.sourceLabel) {
       const languages = document.createElement("span");
       languages.className = "book-languages";
-      languages.textContent = `${entry.sourceLabel} → ${entry.targetLabel}`;
+      languages.textContent = entry.targetLabel
+        ? `${entry.sourceLabel} → ${entry.targetLabel}`
+        : entry.sourceLabel;
       topline.append(languages);
     }
 
@@ -161,7 +163,11 @@
     title.textContent = entry.title;
 
     const description = document.createElement("p");
-    description.textContent = entry.description || "Open the synchronized source and translation.";
+    description.textContent =
+      entry.description ||
+      (entry.targetLabel
+        ? "Open the synchronized source and translation."
+        : "Open the segmented source text with live translation.");
 
     const action = document.createElement("span");
     action.className = "book-action";

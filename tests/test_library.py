@@ -24,37 +24,44 @@ def write_external_book(
     *,
     built: bool = True,
     manifest_slug: str | None = None,
+    translated: bool = True,
 ) -> Path:
     book_dir = books_dir / slug
     book_dir.mkdir(parents=True)
     (book_dir / "source.md").write_text("Source.", encoding="utf-8")
-    (book_dir / "target.md").write_text("Target.", encoding="utf-8")
+    if translated:
+        (book_dir / "target.md").write_text("Target.", encoding="utf-8")
     manifest_path = book_dir / "book.json"
+    target = (
+        {
+            "language": "English",
+            "label": "English",
+            "html_lang": "en",
+            "markdown": "target.md",
+            "html_id_prefix": "target",
+        }
+        if translated
+        else None
+    )
+    manifest: dict[str, object] = {
+        "$schema": "../../schemas/book.schema.json",
+        "schema_version": 2,
+        "slug": manifest_slug or slug,
+        "title": f"Title {slug}",
+        "reader_title": f"Reader {slug}",
+        "description": "Description.",
+        "source": {
+            "language": "Japanese",
+            "label": "日本語",
+            "html_lang": "ja",
+            "markdown": "source.md",
+            "html_id_prefix": "source",
+        },
+    }
+    if target is not None:
+        manifest["target"] = target
     manifest_path.write_text(
-        json.dumps(
-            {
-                "$schema": "../../schemas/book.schema.json",
-                "schema_version": 2,
-                "slug": manifest_slug or slug,
-                "title": f"Title {slug}",
-                "reader_title": f"Reader {slug}",
-                "description": "Description.",
-                "source": {
-                    "language": "Japanese",
-                    "label": "日本語",
-                    "html_lang": "ja",
-                    "markdown": "source.md",
-                    "html_id_prefix": "source",
-                },
-                "target": {
-                    "language": "English",
-                    "label": "English",
-                    "html_lang": "en",
-                    "markdown": "target.md",
-                    "html_id_prefix": "target",
-                },
-            }
-        ),
+        json.dumps(manifest),
         encoding="utf-8",
     )
     if built:
@@ -71,6 +78,19 @@ def test_validate_library_discovers_external_books(tmp_path: Path) -> None:
     assert [book.manifest_path for book in books] == [first.resolve(), second.resolve()]
     assert [book.manifest.slug for book in books] == ["first-book", "second-book"]
     assert validate_library(tmp_path / "missing") == []
+
+
+def test_library_accepts_and_catalogs_a_source_only_book(tmp_path: Path) -> None:
+    books_dir = tmp_path / "books"
+    manifest_path = write_external_book(books_dir, "source-only", translated=False)
+
+    book = load_local_book(manifest_path)
+    catalog = create_catalog(books_dir)
+
+    assert book.manifest.target is None
+    assert catalog is not None
+    assert catalog.books["source-only"].source_label == "日本語"
+    assert catalog.books["source-only"].target_label is None
 
 
 def test_local_book_requires_matching_directory_and_markdown(tmp_path: Path) -> None:

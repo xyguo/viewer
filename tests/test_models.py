@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -55,6 +56,16 @@ def test_manifest_rejects_unknown_fields_and_type_coercion() -> None:
         BookManifest.model_validate(invalid)
 
 
+def test_manifest_accepts_a_segmented_source_without_a_target() -> None:
+    source_only = valid_manifest_data()
+    source_only.pop("target")
+
+    manifest = BookManifest.model_validate(source_only)
+
+    assert manifest.target is None
+    assert manifest.target_path(Path("book.json")) is None
+
+
 @pytest.mark.parametrize("data_file", ["../outside.js", "/tmp/data.js", "data.json"])
 def test_manifest_requires_safe_javascript_output(data_file: str) -> None:
     with pytest.raises(ValidationError, match="data_file"):
@@ -104,6 +115,42 @@ def test_document_payload_uses_camel_case_and_strict_counts() -> None:
     invalid = {**dumped, "segmentCount": "1"}
     with pytest.raises(ValidationError, match="valid integer"):
         BookDocumentPayload.model_validate(invalid)
+
+
+def test_document_payload_accepts_source_only_chapters() -> None:
+    payload = BookDocumentPayload(
+        slug="source-only",
+        schema_version=2,
+        title="Source Only",
+        reader_title="Source Only Reader",
+        description="A segmented source book.",
+        source_language="Japanese",
+        source_label="日本語",
+        source_html_lang="ja",
+        has_offline_translation=False,
+        segment_count=1,
+        initial_chapter_id="s1",
+        chapters=[
+            BookChapter(
+                id="s1",
+                source_title="源",
+                source_data_file="books/source-only/document-data-chunks/001-source.js",
+                segment_ids=["s1"],
+            )
+        ],
+        toc=[TocEntry(segment_id="s1", chapter_id="s1", level=1, title="源")],
+        generated_at=datetime(2026, 1, 2, tzinfo=UTC),
+        mathjax=MathJaxManifest(),
+    )
+
+    dumped = payload.model_dump(mode="json", by_alias=True)
+    assert dumped["hasOfflineTranslation"] is False
+    assert dumped["targetLanguage"] is None
+    assert dumped["chapters"][0]["targetDataFile"] is None
+
+    dumped_python = payload.model_dump(by_alias=True)
+    with pytest.raises(ValidationError, match="must not declare offline target metadata"):
+        BookDocumentPayload.model_validate({**dumped_python, "targetLabel": "English"})
 
 
 def test_manifest_rejects_incompatible_schema_and_external_markdown_paths() -> None:

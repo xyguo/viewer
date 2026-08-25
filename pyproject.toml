@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "parallel-book-viewer"
 version = "0.1.0"
-description = "A lightweight sentence-aligned reader for translated books"
+description = "A lightweight segmented reader with live and optional offline translation"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
