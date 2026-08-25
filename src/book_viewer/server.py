@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import ipaddress
 import logging
 import posixpath
 import urllib.parse
@@ -17,16 +18,18 @@ from typing import TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
+from .config_file import ConfigSettingsStore, SettingsStoreError
 from .library import create_catalog, serialize_catalog
 from .models import (
     ErrorResponse,
     ReadingStateCollection,
     ReadingStateUpdate,
+    SettingsUpdate,
     TranslationRequest,
     TranslationResponse,
 )
 from .reader_data import ReaderDataStore
-from .settings import ServerSettings
+from .settings import ServerSettings, load_server_settings
 from .translation import (
     OpenAICompatibleTranslator,
     TranslationCache,
@@ -37,6 +40,7 @@ from .translation import (
 
 MAX_REQUEST_BYTES = 64 * 1024
 READING_STATES_ENDPOINT = "/api/reading-states"
+SETTINGS_ENDPOINT = "/api/settings"
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
@@ -56,6 +60,7 @@ class BookViewerHTTPServer(ThreadingHTTPServer):
         settings: ServerSettings,
         translator: Translator | None = None,
         reader_data_store: ReaderDataStore | None = None,
+        settings_store: ConfigSettingsStore | None = None,
     ) -> None:
         static_root = settings.static_root.resolve()
         if not static_root.is_dir():
@@ -63,6 +68,7 @@ class BookViewerHTTPServer(ThreadingHTTPServer):
         self.settings = settings
         self.books_root = settings.books_root.resolve()
         self.reader_data_store = reader_data_store or ReaderDataStore(settings.reader_data_path)
+        self.settings_store = settings_store or ConfigSettingsStore(settings.config_path)
         catalog = create_catalog(self.books_root)
         self.catalog_book_count = 0 if catalog is None else len(catalog.books)
         if translator is not None:
@@ -99,6 +105,24 @@ class ReaderHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         request_path = urllib.parse.urlsplit(self.path).path
+        if request_path == SETTINGS_ENDPOINT:
+            if not self._settings_request_is_local():
+                self._send_json(
+                    ErrorResponse(error="Settings are available only on this device."),
+                    HTTPStatus.FORBIDDEN,
+                )
+                return
+            try:
+                self._send_json(self.viewer_server.settings_store.read())
+            except SettingsStoreError as error:
+                self._send_json(ErrorResponse(error=str(error)), error.status)
+            except Exception:
+                logging.exception("Could not read local viewer settings")
+                self._send_json(
+                    ErrorResponse(error="The local viewer could not read its settings."),
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            return
         if request_path == READING_STATES_ENDPOINT:
             try:
                 states = self.viewer_server.reader_data_store.list_reading_states()
@@ -138,6 +162,20 @@ class ReaderHandler(SimpleHTTPRequestHandler):
                 state = self.viewer_server.reader_data_store.update_reading_state(update)
                 self._send_json(state)
                 return
+            if request_path == SETTINGS_ENDPOINT:
+                if not self._settings_request_is_local():
+                    self._send_json(
+                        ErrorResponse(error="Settings are available only on this device."),
+                        HTTPStatus.FORBIDDEN,
+                    )
+                    return
+                update = self._read_json_request(
+                    SettingsUpdate,
+                    "settings schema",
+                )
+                document = self.viewer_server.settings_store.update(update.values)
+                self._send_json(document)
+                return
             if request_path == "/api/translate":
                 request = self._read_json_request(
                     TranslationRequest,
@@ -154,6 +192,8 @@ class ReaderHandler(SimpleHTTPRequestHandler):
         except ClientRequestError as error:
             self._send_json(ErrorResponse(error=str(error)), error.status)
         except TranslationError as error:
+            self._send_json(ErrorResponse(error=str(error)), error.status)
+        except SettingsStoreError as error:
             self._send_json(ErrorResponse(error=str(error)), error.status)
         except Exception:
             logging.exception("Unexpected local viewer API error")
@@ -201,6 +241,16 @@ class ReaderHandler(SimpleHTTPRequestHandler):
         )
         return hashlib.sha256(cache_material.encode()).hexdigest()
 
+    def _settings_request_is_local(self) -> bool:
+        client_host = str(self.client_address[0])
+        host_header = self.headers.get("Host", "")
+        request_host = urllib.parse.urlsplit(f"//{host_header}").hostname
+        return (
+            _is_loopback_host(client_host)
+            and request_host is not None
+            and (request_host.casefold() == "localhost" or _is_loopback_host(request_host))
+        )
+
     def _send_json(self, payload: BaseModel, status: HTTPStatus = HTTPStatus.OK) -> None:
         body = payload.model_dump_json(by_alias=True).encode()
         self.send_response(status)
@@ -228,15 +278,28 @@ def _resolve_static_path(root: Path, request_path: str) -> Path:
     return candidate
 
 
+def _is_loopback_host(value: str) -> bool:
+    try:
+        return ipaddress.ip_address(value).is_loopback
+    except ValueError:
+        return False
+
+
 def create_server(
     settings: ServerSettings | None = None,
     *,
     translator: Translator | None = None,
     reader_data_store: ReaderDataStore | None = None,
+    settings_store: ConfigSettingsStore | None = None,
 ) -> BookViewerHTTPServer:
     """Create a configured server without starting its event loop."""
 
-    return BookViewerHTTPServer(settings or ServerSettings(), translator, reader_data_store)
+    return BookViewerHTTPServer(
+        settings or load_server_settings(),
+        translator,
+        reader_data_store,
+        settings_store,
+    )
 
 
 def _browser_url(host: str, port: int) -> str:

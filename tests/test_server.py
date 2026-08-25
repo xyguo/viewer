@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import json
 import threading
+import tomllib
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +14,7 @@ import pytest
 from pytest import CaptureFixture, MonkeyPatch
 
 from book_viewer import server as server_module
+from book_viewer.config_file import ConfigSettingsStore
 from book_viewer.models import TranslationRequest
 from book_viewer.server import create_server, run_server
 from book_viewer.settings import ServerSettings
@@ -33,6 +35,20 @@ class FailingTranslator:
     def translate(self, request: TranslationRequest) -> str:
         del request
         raise TranslationError("Backend unavailable.")
+
+
+class MemoryCredentialStore:
+    def __init__(self, api_key: str | None = None) -> None:
+        self.api_key = api_key
+
+    def read_api_key(self) -> str | None:
+        return self.api_key
+
+    def write_api_key(self, value: str) -> None:
+        self.api_key = value
+
+    def delete_api_key(self) -> None:
+        self.api_key = None
 
 
 class InterruptingServer:
@@ -56,13 +72,17 @@ def running_server(
     *,
     static_root: Path | None = None,
     books_root: Path | None = None,
+    config_path: Path | None = None,
+    credentials: MemoryCredentialStore | None = None,
 ) -> Generator[tuple[str, int]]:
     selected_static_root = static_root or tmp_path
     selected_static_root.mkdir(parents=True, exist_ok=True)
     index_path = selected_static_root / "index.html"
     if not index_path.exists():
         index_path.write_text("<h1>Reader</h1>", encoding="utf-8")
+    selected_config_path = config_path or tmp_path / "config.toml"
     settings = ServerSettings(
+        config_path=selected_config_path,
         host="127.0.0.1",
         port=0,
         static_root=selected_static_root,
@@ -71,7 +91,14 @@ def running_server(
         chat_completions_url=None,
         chat_model=None,
     )
-    server = create_server(settings, translator=translator)
+    server = create_server(
+        settings,
+        translator=translator,
+        settings_store=ConfigSettingsStore(
+            selected_config_path,
+            credentials or MemoryCredentialStore(),
+        ),
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address[:2]
@@ -98,9 +125,15 @@ def post_json(host: str, port: int, path: str, payload: object) -> tuple[int, di
     return status, body
 
 
-def get_text(host: str, port: int, path: str) -> tuple[int, str, dict[str, str]]:
+def get_text(
+    host: str,
+    port: int,
+    path: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, str, dict[str, str]]:
     connection = http.client.HTTPConnection(host, port, timeout=2)
-    connection.request("GET", path)
+    connection.request("GET", path, headers=headers or {})
     response = connection.getresponse()
     status = response.status
     body = response.read().decode()
@@ -218,6 +251,73 @@ def test_server_serves_static_files_with_security_headers(tmp_path: Path) -> Non
     assert body == "<h1>Reader</h1>"
     assert headers["Referrer-Policy"] == "no-referrer"
     assert headers["X-Frame-Options"] == "SAMEORIGIN"
+
+
+def test_settings_endpoint_never_returns_stored_secrets(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """schema_version = 1
+
+[translation]
+chat_completions_url = "https://provider.example/v1/chat/completions"
+model = "model"
+""",
+        encoding="utf-8",
+    )
+    with running_server(
+        tmp_path,
+        FakeTranslator(),
+        config_path=config_path,
+        credentials=MemoryCredentialStore("super-secret"),
+    ) as (host, port):
+        status, body, headers = get_text(host, port, "/api/settings")
+
+    payload = json.loads(body)
+    api_key = next(field for field in payload["fields"] if field["name"] == "translation.api_key")
+    assert status == 200
+    assert headers["Cache-Control"] == "no-store"
+    assert "super-secret" not in body
+    assert api_key["value"] is None
+    assert api_key["isSet"] is True
+
+
+def test_settings_endpoint_validates_and_persists_updates(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("schema_version = 1\n\n[viewer]\nport = 8000\n", encoding="utf-8")
+    with running_server(tmp_path, FakeTranslator(), config_path=config_path) as (host, port):
+        status, payload = post_json(
+            host,
+            port,
+            "/api/settings",
+            {"values": {"viewer.port": "8123"}},
+        )
+        invalid_status, invalid_payload = post_json(
+            host,
+            port,
+            "/api/settings",
+            {"values": {"viewer.port": "70000"}},
+        )
+
+    assert status == 200
+    assert payload["restartRequired"] is True
+    with config_path.open("rb") as config_file:
+        saved = tomllib.load(config_file)
+    assert saved["viewer"]["port"] == 8123
+    assert invalid_status == 400
+    assert "less than or equal to 65535" in str(invalid_payload["error"])
+
+
+def test_settings_endpoint_rejects_nonlocal_host_headers(tmp_path: Path) -> None:
+    with running_server(tmp_path, FakeTranslator()) as (host, port):
+        status, body, _headers = get_text(
+            host,
+            port,
+            "/api/settings",
+            headers={"Host": "attacker.example"},
+        )
+
+    assert status == 403
+    assert json.loads(body) == {"error": "Settings are available only on this device."}
 
 
 def test_server_serves_external_books_from_a_separate_root(tmp_path: Path) -> None:
