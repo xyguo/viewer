@@ -9,6 +9,7 @@ Parallel Book Viewer is a lightweight static reader with a small typed Python se
 ## Project layout
 
 - `index.html`, `bootstrap.js`, `preferences.js`, `app.js`, and `styles.css`: generic catalog and reader frontend.
+- `biome.json`, `jsconfig.json`, and `frontend.d.ts`: development-only frontend linting, formatting, and strict JavaScript type contracts.
 - `src/book_viewer/`: strict Pydantic models, book builder, library discovery, versioned reader-data persistence, syntax-highlighting extensions, settings, translation client, MathJax installer, HTTP server, and command-line entry points.
 - `schemas/book.schema.json`: generated, tracked manifest contract.
 - `tests/`: Python, HTTP, frontend-contract, and project-skill tests.
@@ -65,6 +66,7 @@ UV_CACHE_DIR=.uv-cache uv sync --all-groups --locked
 ```
 
 Keep Python boundaries strictly typed, validate external data with Pydantic, and add focused tests for behavior changes. Preserve the lightweight frontend and chapter-lazy rendering model when refactoring.
+Keep standalone `biome` and native `tsc` on the development `PATH`; do not add Node.js or either tool to the application runtime.
 
 Install the commit hook once per clone:
 
@@ -78,6 +80,6 @@ Run the complete gate before committing:
 scripts/check.sh
 ```
 
-The gate synchronizes locked dependencies, checks Ruff formatting and linting, runs Pyright in strict mode, runs Pytest with branch coverage and an 80% minimum, and validates every external manifest currently under `books/`.
+The gate checks the browser scripts with Biome and strict JavaScript type checking, synchronizes locked dependencies, checks Ruff formatting and linting, runs Pyright in strict mode, runs Pytest with branch coverage and an 80% minimum, and validates every external manifest currently under `books/`.
 
 Build distributable artifacts with `scripts/build-binary.sh`. Install the optional thin offline MathJax runtime with `uv run book-viewer-install-mathjax` before building when the executable must render equations without network access.

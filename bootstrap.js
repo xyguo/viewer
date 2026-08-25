@@ -1,4 +1,5 @@
 (() => {
+  // biome-ignore lint/suspicious/noRedundantUseStrict: This file runs as a classic browser script.
   "use strict";
 
   const SUPPORTED_BOOK_SCHEMA_VERSION = 2;
@@ -6,24 +7,31 @@
   const EXAMPLE_CATALOG_URL = "books/example/catalog.js";
   const MATHJAX_URLS = [
     "vendor/mathjax/es5/tex-chtml.js",
-    "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"
+    "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js",
   ];
   const PRELOADED_TEX_PACKAGES = new Set([
-    "ams", "autoload", "configmacros", "newcommand", "noundefined", "require"
+    "ams",
+    "autoload",
+    "configmacros",
+    "newcommand",
+    "noundefined",
+    "require",
   ]);
-  const catalogPage = document.querySelector("#catalog-page");
-  const catalogCount = document.querySelector("#catalog-count");
-  const catalogAlert = document.querySelector("#catalog-alert");
-  const catalogEmpty = document.querySelector("#catalog-empty");
-  const catalogEmptyMessage = document.querySelector("#catalog-empty-message");
-  const bookList = document.querySelector("#book-list");
-  const readerShell = document.querySelector(".app-shell");
-  const skipLink = document.querySelector("#skip-link");
+  const catalogPage = requiredElement("#catalog-page", HTMLElement);
+  const catalogCount = requiredElement("#catalog-count", HTMLElement);
+  const catalogAlert = requiredElement("#catalog-alert", HTMLElement);
+  const catalogEmpty = requiredElement("#catalog-empty", HTMLElement);
+  const catalogEmptyMessage = requiredElement("#catalog-empty-message", HTMLElement);
+  const bookList = requiredElement("#book-list", HTMLElement);
+  const readerShell = requiredElement(".app-shell", HTMLElement);
+  const skipLink = requiredElement("#skip-link", HTMLAnchorElement);
 
+  /** @param {string} message */
   function fail(message) {
     window.BookViewer?.showLoadError(message);
   }
 
+  /** @param {BookDocument} documentData */
   function configureMathJax(documentData) {
     const packages = documentData.mathjax?.packages || [];
     const macros = documentData.mathjax?.macros || {};
@@ -31,31 +39,38 @@
       loader: {
         load: packages
           .filter((name) => !PRELOADED_TEX_PACKAGES.has(name.toLowerCase()))
-          .map((name) => `[tex]/${name}`)
+          .map((name) => `[tex]/${name}`),
       },
       tex: {
         packages: { "[+]": packages },
-        inlineMath: [["$", "$"], ["\\(", "\\)"]],
-        displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+        inlineMath: [
+          ["$", "$"],
+          ["\\(", "\\)"],
+        ],
+        displayMath: [
+          ["$$", "$$"],
+          ["\\[", "\\]"],
+        ],
         tags: "ams",
-        macros
+        macros,
       },
       options: {
         enableMenu: false,
-        skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"]
+        skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"],
       },
       startup: {
         typeset: false,
         ready() {
-          window.MathJax.startup.defaultReady();
-          window.MathJax.startup.promise.then(() => {
+          window.MathJax?.startup?.defaultReady?.();
+          window.MathJax?.startup?.promise?.then(() => {
             window.dispatchEvent(new Event("mathjax-ready"));
           });
-        }
-      }
+        },
+      },
     };
   }
 
+  /** @param {number} [urlIndex] */
   function loadMathJax(urlIndex = 0) {
     const script = document.createElement("script");
     script.src = MATHJAX_URLS[urlIndex];
@@ -71,16 +86,21 @@
     document.head.append(script);
   }
 
+  /** @param {string} [message] */
   function showCatalog(message = "") {
     const catalog = window.BOOK_VIEWER_CATALOG;
+    /** @type {[string, CatalogEntry, number, number][]} */
     const entries = Object.entries(catalog?.books || {})
       .filter(([, entry]) => entry?.title && entry?.dataFile)
-      .map(([slug, entry]) => [
-        slug,
-        entry,
-        window.BookViewerPreferences.lastOpenedAt(slug),
-        window.BookViewerPreferences.progressPercent(slug),
-      ])
+      .map(
+        ([slug, entry]) =>
+          /** @type {[string, CatalogEntry, number, number]} */ ([
+            slug,
+            entry,
+            window.BookViewerPreferences.lastOpenedAt(slug),
+            window.BookViewerPreferences.progressPercent(slug),
+          ]),
+      )
       .sort(([leftSlug, , leftOpenedAt], [rightSlug, , rightOpenedAt]) => {
         if (leftOpenedAt !== rightOpenedAt) return rightOpenedAt - leftOpenedAt;
         if (leftSlug === catalog?.defaultBook) return -1;
@@ -101,7 +121,8 @@
     catalogCount.textContent = `${bookCount.toLocaleString()} ${bookCount === 1 ? "book" : "books"} available`;
     catalogEmpty.hidden = bookCount > 0;
     if (bookCount === 0 && message) {
-      catalogEmptyMessage.textContent = "Rebuild the local catalog after adding or updating external books.";
+      catalogEmptyMessage.textContent =
+        "Rebuild the local catalog after adding or updating external books.";
     }
 
     entries.forEach(([slug, entry, , progressPercent], index) => {
@@ -109,6 +130,12 @@
     });
   }
 
+  /**
+   * @param {string} slug
+   * @param {CatalogEntry} entry
+   * @param {number} index
+   * @param {number} progressPercent
+   */
   function createBookCard(slug, entry, index, progressPercent) {
     const link = document.createElement("a");
     link.className = "book-card";
@@ -192,7 +219,9 @@
         return;
       }
       if (documentData.schemaVersion !== SUPPORTED_BOOK_SCHEMA_VERSION) {
-        fail(`The data for '${requestedSlug}' is incompatible with this viewer version. Rebuild it.`);
+        fail(
+          `The data for '${requestedSlug}' is incompatible with this viewer version. Rebuild it.`,
+        );
         return;
       }
       window.BookViewerPreferences.touch(requestedSlug);
@@ -204,6 +233,10 @@
     document.head.append(script);
   }
 
+  /**
+   * @param {string} url
+   * @param {() => void} onError
+   */
   function loadCatalogScript(url, onError) {
     const script = document.createElement("script");
     script.src = url;
@@ -225,6 +258,20 @@
         showCatalog("The local and example book catalogs are missing.");
       });
     });
+  }
+
+  /**
+   * @template {Element} ElementType
+   * @param {string} selector
+   * @param {new () => ElementType} elementType
+   * @returns {ElementType}
+   */
+  function requiredElement(selector, elementType) {
+    const element = document.querySelector(selector);
+    if (!(element instanceof elementType)) {
+      throw new Error(`Required element '${selector}' is missing or has the wrong type.`);
+    }
+    return element;
   }
 
   window.BookViewerPreferences.ready.then(loadCatalog);
