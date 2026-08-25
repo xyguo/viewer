@@ -4,8 +4,6 @@
 
 Parallel Book Viewer is a lightweight static reader with a small typed Python server and build toolchain. Keep the browser application book-independent and keep ordinary book packages external under the ignored `books/` directory. The sole tracked exception is the canonical `books/example/` fixture.
 
-`README.md` is the concise user quick start. Put contributor workflow and repository architecture here. Put document ingestion, translation, alignment, manifest, and book verification instructions in `.agent/skills/create-viewer-book/`.
-
 ## Project layout
 
 - `index.html`, `bootstrap.js`, `preferences.js`, `app.js`, and `styles.css`: generic catalog and reader frontend.
@@ -32,16 +30,9 @@ Generated `document-data.js`, `document-data-chunks/`, per-book `catalog.js`, an
 Pandoc provides highlighting for its supported languages. Put custom language tokenizers under
 `src/book_viewer/syntax_highlighting/` and keep them out of the general builder.
 
-## Reader-data contracts
+## Data persistence
 
-- **Book slug**: stable reader-wide book identity across rebuilds and library relocation.
-- **Reading state**: the single replaceable resumable location, progress, and activity time for a book.
-- **Annotation**: a future independently identified bookmark, note, highlight, or underline; annotations are not reading state.
-
-`preferences.js` keeps browser storage as a fallback and synchronizes reading state through the
-local server. `src/book_viewer/reader_data.py` owns the per-user SQLite database. Extend its schema
-with a new numbered migration, leaving applied migrations unchanged; add future annotation data
-in separate tables with stable identities.
+Persist each book's last-opened time, chapter, nearest segment, progress percentage, and source and target scroll positions under its stable book slug. `preferences.js` keeps browser storage as a fallback and synchronizes reading state through the local server; `src/book_viewer/reader_data.py` owns the per-user SQLite database. Extend the database with new numbered migrations, leaving applied migrations unchanged, and keep future bookmarks, notes, highlights, and underlines in separate tables with stable identities.
 
 ## Local installation contracts
 
@@ -56,6 +47,10 @@ UV_CACHE_DIR=.uv-cache uv run --offline book-viewer-schema --output schemas/book
 ```
 
 Keep ordinary book packages and installed MathJax out of version control. The tracked `books/example/` package is the compatibility fixture and must contain its source PDF, aligned Markdown editions, assets, and generated browser metadata. Validate all locally present manifests so application changes remain compatible with the current external library.
+
+## Documentation
+
+Before each code commit, examine all repository documentation for updates required by the code. Keep the repository `README.md` succinct and user-facing, without internal application implementation detail. Put development documentation under `docs/`. Add documentation text only for genuine new functionality; otherwise correct or prune stale material.
 
 ## Development workflow
 

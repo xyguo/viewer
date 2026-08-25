@@ -2,9 +2,9 @@
 
 A lightweight local reader for language study. It allows you to easily access the translation of any sentence when reading an article (written in a foreign language). You can also read the bilingual version of the article side by side, with sentence-level synchronization.
 
-![Source and translation displayed side by side](docs/assets/reader-side-by-side.png)
-
-![Single-language view with its corresponding translation](docs/assets/reader-translation-popup.png)
+| Bilingual reading | Translation popup |
+| --- | --- |
+| ![Source and translation displayed side by side](docs/assets/reader-side-by-side.png) | ![Single-language view with its corresponding translation](docs/assets/reader-translation-popup.png) |
 
 ## Install and run
 
@@ -53,12 +53,6 @@ to delete it.
 Create a `books/` folder in the repository and put the PDF you want to read in it. Then point an AI agent at the repository and ask it to use the project skill at `.agent/skills/create-viewer-book` to convert the PDF into the format accepted by the viewer.
 
 Except for the small tracked `books/example/` package, book source files, translations, metadata, generated browser data, and assets under `books/` remain local and are intentionally excluded from Git.
-
-When using `book-viewer-serve`, the server discovers built books and creates the library catalog in memory for every catalog request. Refresh the library page after adding or rebuilding a book; restarting the server is unnecessary. The generated `books/catalog.js` file remains available for opening or hosting the static viewer without the Python server.
-
-The reader stores each book's last-opened time and reading position locally on this computer.
-Recently opened books appear first in the library, and reopening a book resumes at its saved
-position even when using another browser or local server address.
 
 ## Live translation
 
