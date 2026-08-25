@@ -67,6 +67,7 @@ def running_server(
         port=0,
         static_root=selected_static_root,
         books_root=books_root or tmp_path / "books",
+        reader_data_path=tmp_path / "reader-data.sqlite3",
         chat_completions_url=None,
         chat_model=None,
     )
@@ -291,6 +292,47 @@ def test_server_refreshes_catalog_without_restart_or_generated_root_file(tmp_pat
     assert '"sample-book"' in refreshed_body
     assert '"new-book"' in refreshed_body
     assert not (books_root / "catalog.js").exists()
+
+
+def test_server_persists_reading_state_across_restarts(tmp_path: Path) -> None:
+    update = {
+        "bookSlug": "sample-book",
+        "chapterId": "chapter-2",
+        "segmentId": "segment-14",
+        "progressPercent": 42,
+        "sourceScrollTop": 750,
+        "targetScrollTop": 810,
+        "lastOpenedAt": 1_000,
+        "updatedAt": 1_100,
+    }
+    with running_server(tmp_path, FakeTranslator()) as (host, port):
+        status, saved = post_json(host, port, "/api/reading-states", update)
+
+    assert status == 200
+    assert saved == update
+
+    with running_server(tmp_path, FakeTranslator()) as (host, port):
+        status, body, _headers = get_text(host, port, "/api/reading-states")
+
+    assert status == 200
+    assert json.loads(body) == {"states": [update]}
+
+
+def test_server_rejects_invalid_reading_state(tmp_path: Path) -> None:
+    with running_server(tmp_path, FakeTranslator()) as (host, port):
+        status, response = post_json(
+            host,
+            port,
+            "/api/reading-states",
+            {
+                "bookSlug": "sample-book",
+                "progressPercent": 101,
+                "updatedAt": 1_100,
+            },
+        )
+
+    assert status == 400
+    assert "reading-state schema" in str(response["error"])
 
 
 def test_run_server_opens_browser_after_binding(

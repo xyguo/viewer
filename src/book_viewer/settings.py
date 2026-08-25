@@ -79,6 +79,21 @@ def default_config_path() -> Path:
     return config_home / "parallel-book-viewer" / "config.toml"
 
 
+def default_reader_data_path() -> Path:
+    """Return the platform-appropriate persistent reader database path."""
+
+    home = Path.home()
+    if sys.platform == "darwin":
+        data_home = home / "Library" / "Application Support" / APP_DIRECTORY_NAME
+    elif sys.platform == "win32":
+        data_home = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
+        data_home /= APP_DIRECTORY_NAME
+    else:
+        data_home = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share"))
+        data_home /= "parallel-book-viewer"
+    return data_home / "reader-data.sqlite3"
+
+
 def load_viewer_config(config_path: Path | None = None) -> ViewerConfig | None:
     """Load a strict optional user configuration file."""
 
@@ -115,6 +130,10 @@ class ServerSettings(BaseSettings):
     port: int = Field(default=8000, validation_alias="VIEWER_PORT", ge=0, le=65_535)
     static_root: Path = Field(default=DEFAULT_STATIC_ROOT, validation_alias="VIEWER_STATIC_ROOT")
     books_root: Path = Field(default=DEFAULT_BOOKS_ROOT, validation_alias="VIEWER_BOOKS_ROOT")
+    reader_data_path: Path = Field(
+        default_factory=default_reader_data_path,
+        validation_alias="VIEWER_DATA_PATH",
+    )
     chat_completions_url: AnyHttpUrl | None = Field(
         default=None,
         validation_alias="LLM_CHAT_COMPLETIONS_URL",

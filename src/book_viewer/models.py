@@ -5,11 +5,12 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 BOOK_SCHEMA_VERSION = 2
+BOOK_SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
 
 
 def _to_camel(value: str) -> str:
@@ -86,7 +87,7 @@ class BookManifest(StrictModel):
 
     schema_uri: str | None = Field(default=None, alias="$schema")
     schema_version: Literal[2]
-    slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    slug: str = Field(pattern=BOOK_SLUG_PATTERN)
     title: str = Field(min_length=1, max_length=300)
     reader_title: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1, max_length=500)
@@ -140,6 +141,59 @@ class BrowserModel(StrictModel):
         populate_by_name=True,
         strict=True,
     )
+
+
+class ReadingState(BrowserModel):
+    """Latest resumable reading activity for one book."""
+
+    book_slug: str = Field(pattern=BOOK_SLUG_PATTERN)
+    chapter_id: str | None = Field(default=None, min_length=1, max_length=500)
+    segment_id: str | None = Field(default=None, min_length=1, max_length=500)
+    progress_percent: int = Field(default=0, ge=0, le=100)
+    source_scroll_top: float | None = Field(default=None, ge=0)
+    target_scroll_top: float | None = Field(default=None, ge=0)
+    last_opened_at: int = Field(default=0, ge=0)
+    updated_at: int = Field(ge=0)
+
+    @field_validator("chapter_id", "segment_id")
+    @classmethod
+    def reject_untrimmed_location_ids(cls, value: str | None) -> str | None:
+        if value is not None and value != value.strip():
+            raise ValueError("location IDs must not have surrounding whitespace")
+        return value
+
+
+class ReadingStateUpdate(BrowserModel):
+    """Validated partial reading-state update sent by the browser."""
+
+    book_slug: str = Field(pattern=BOOK_SLUG_PATTERN)
+    chapter_id: str | None = Field(default=None, min_length=1, max_length=500)
+    segment_id: str | None = Field(default=None, min_length=1, max_length=500)
+    progress_percent: int | None = Field(default=None, ge=0, le=100)
+    source_scroll_top: float | None = Field(default=None, ge=0)
+    target_scroll_top: float | None = Field(default=None, ge=0)
+    last_opened_at: int | None = Field(default=None, ge=0)
+    updated_at: int = Field(ge=0)
+
+    @field_validator("chapter_id", "segment_id")
+    @classmethod
+    def reject_untrimmed_location_ids(cls, value: str | None) -> str | None:
+        if value is not None and value != value.strip():
+            raise ValueError("location IDs must not have surrounding whitespace")
+        return value
+
+    @model_validator(mode="after")
+    def require_state_change(self) -> Self:
+        changed_fields = self.model_fields_set - {"book_slug", "updated_at"}
+        if not changed_fields or all(getattr(self, field) is None for field in changed_fields):
+            raise ValueError("a reading-state update must contain at least one value")
+        return self
+
+
+class ReadingStateCollection(BrowserModel):
+    """All reading states stored for the local reader."""
+
+    states: list[ReadingState]
 
 
 class BookChapter(BrowserModel):
@@ -246,7 +300,7 @@ class CatalogEntry(BrowserModel):
 
 class BookCatalog(BrowserModel):
     schema_version: Literal[2]
-    default_book: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    default_book: str = Field(pattern=BOOK_SLUG_PATTERN)
     books: dict[str, CatalogEntry] = Field(min_length=1)
 
 

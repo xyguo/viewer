@@ -227,5 +227,5 @@
     });
   }
 
-  loadCatalog();
+  window.BookViewerPreferences.ready.then(loadCatalog);
 })();

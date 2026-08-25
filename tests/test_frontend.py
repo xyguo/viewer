@@ -120,8 +120,11 @@ def test_reader_persists_library_recency_and_reading_position() -> None:
 
     assert scripts[-3:] == ["preferences.js", "app.js", "bootstrap.js"]
     assert 'const STORAGE_PREFIX = "book-viewer-reading:v1:";' in preferences
+    assert 'const READING_STATES_URL = "/api/reading-states";' in preferences
     assert "localStorage.getItem(storageKey(slug))" in preferences
     assert "localStorage.setItem(storageKey(slug)" in preferences
+    assert "keepalive: true" in preferences
+    assert "BookViewerPreferences.ready.then(loadCatalog)" in bootstrap
     assert "lastOpenedAt: Date.now()" in preferences
     assert "function progressPercent(slug)" in preferences
     assert "BookViewerPreferences.lastOpenedAt(slug)" in bootstrap

@@ -22,6 +22,7 @@ def test_default_settings_make_no_provider_assumptions(
         "VIEWER_PORT",
         "VIEWER_STATIC_ROOT",
         "VIEWER_BOOKS_ROOT",
+        "VIEWER_DATA_PATH",
         "LLM_CHAT_COMPLETIONS_URL",
         "LLM_MODEL",
         "LLM_API_KEY",
@@ -31,6 +32,7 @@ def test_default_settings_make_no_provider_assumptions(
     settings = ServerSettings()
     assert settings.host == "127.0.0.1"
     assert settings.port == 8000
+    assert settings.reader_data_path.is_absolute()
     assert settings.chat_completions_endpoint is None
     assert settings.chat_model is None
     assert settings.translation_backend_configured is False
@@ -43,6 +45,7 @@ def test_settings_parse_documented_environment(monkeypatch: MonkeyPatch, tmp_pat
     monkeypatch.setenv("VIEWER_PORT", "8123")
     monkeypatch.setenv("VIEWER_STATIC_ROOT", str(tmp_path))
     monkeypatch.setenv("VIEWER_BOOKS_ROOT", str(tmp_path / "library"))
+    monkeypatch.setenv("VIEWER_DATA_PATH", str(tmp_path / "reader-data.sqlite3"))
     monkeypatch.setenv(
         "LLM_CHAT_COMPLETIONS_URL",
         "https://provider.example/api/v1/chat/completions",
@@ -55,6 +58,7 @@ def test_settings_parse_documented_environment(monkeypatch: MonkeyPatch, tmp_pat
     assert settings.port == 8123
     assert settings.static_root == tmp_path
     assert settings.books_root == tmp_path / "library"
+    assert settings.reader_data_path == tmp_path / "reader-data.sqlite3"
     assert settings.chat_completions_endpoint == (
         "https://provider.example/api/v1/chat/completions"
     )
