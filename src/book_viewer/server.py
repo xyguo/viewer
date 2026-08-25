@@ -7,6 +7,8 @@ import hashlib
 import logging
 import posixpath
 import urllib.parse
+import webbrowser
+from collections.abc import Callable
 from contextlib import suppress
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -196,14 +198,35 @@ def create_server(
     return BookViewerHTTPServer(settings or ServerSettings(), translator)
 
 
-def run_server(settings: ServerSettings | None = None) -> int:
+def _browser_url(host: str, port: int) -> str:
+    browser_host = {"0.0.0.0": "127.0.0.1", "::": "::1"}.get(host, host)
+    if ":" in browser_host:
+        browser_host = f"[{browser_host}]"
+    return f"http://{browser_host}:{port}"
+
+
+def run_server(
+    settings: ServerSettings | None = None,
+    *,
+    open_browser: bool = True,
+    browser_opener: Callable[[str], bool] | None = None,
+) -> int:
     """Run the local reader until interrupted."""
 
     server = create_server(settings)
     try:
         host, port = server.server_address[:2]
-        print(f"Parallel book reader available at http://{host}:{port}")
+        reader_url = _browser_url(str(host), int(port))
+        print(f"Parallel book reader available at {reader_url}")
         print(f"Found {server.catalog_book_count} built books in {server.books_root}")
+        if open_browser:
+            try:
+                opened = (browser_opener or webbrowser.open_new_tab)(reader_url)
+            except Exception:
+                logging.exception("Could not open the default browser")
+                opened = False
+            if not opened:
+                print(f"Could not open a browser automatically. Open {reader_url} manually.")
         print("Press Ctrl-C to stop.")
         try:
             server.serve_forever()

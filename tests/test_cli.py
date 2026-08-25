@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from pytest import CaptureFixture, MonkeyPatch
 from book_viewer import cli
 from book_viewer.library import LocalBook
 from book_viewer.models import BuildResult, CatalogBuildResult
+from book_viewer.settings import ServerSettings
 
 
 def test_run_build_uses_selected_manifest(
@@ -56,16 +58,54 @@ def test_build_command_requires_manifest() -> None:
     assert exit_info.value.code == 2
 
 
-def test_serve_main_exits_with_server_status(monkeypatch: MonkeyPatch) -> None:
+def test_uv_serve_entrypoint_opens_browser_by_default(monkeypatch: MonkeyPatch) -> None:
     from book_viewer import server
 
-    def fake_run_server() -> int:
+    def fake_run_server(_settings: object, *, open_browser: bool) -> int:
+        assert open_browser is True
         return 3
 
     monkeypatch.setattr(server, "run_server", fake_run_server)
+    monkeypatch.setattr("sys.argv", ["book-viewer-serve"])
     with pytest.raises(SystemExit) as exit_info:
         cli.serve_main()
     assert exit_info.value.code == 3
+
+
+def test_standalone_entrypoint_uses_the_same_serve_cli(monkeypatch: MonkeyPatch) -> None:
+    calls = 0
+
+    def fake_serve_main() -> None:
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(cli, "serve_main", fake_serve_main)
+    runpy.run_module("book_viewer", run_name="__main__")
+
+    assert calls == 1
+
+
+def test_run_serve_passes_command_line_options(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    from book_viewer import server
+
+    books_root = tmp_path / "library"
+
+    def fake_run_server(settings: ServerSettings, *, open_browser: bool) -> int:
+        assert settings.books_root == books_root
+        assert open_browser is False
+        return 0
+
+    monkeypatch.setattr(server, "run_server", fake_run_server)
+    assert cli.run_serve(["--books-root", str(books_root), "--no-open"]) == 0
+
+
+def test_run_serve_reports_invalid_config(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        cli.run_serve(["--config", str(tmp_path / "missing.toml")])
+    assert exit_info.value.code == 2
 
 
 def test_validate_and_schema_commands(

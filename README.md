@@ -1,6 +1,6 @@
 # Parallel Book Viewer
 
-A lightweight local reader for studying sentence-aligned source documents and translations side by side or one language at a time.
+A lightweight local reader for language study. It allows you to easily access the translation of any sentence when reading an article (written in a foreign language). You can also read the bilingual version of the article side by side, with sentence-level synchronization.
 
 ![Source and translation displayed side by side](docs/assets/reader-side-by-side.png)
 
@@ -14,17 +14,23 @@ Install [uv](https://docs.astral.sh/uv/), clone this repository, enter its root,
 uv run book-viewer-serve
 ```
 
-Open `http://127.0.0.1:8000` in a browser.
+The server opens `http://127.0.0.1:8000` in the default browser. Pass `--no-open` when
+running it in a headless environment or when you want to open the URL yourself.
 
-When run from source, the app reads its library from the repository's `books/` directory. A standalone executable instead looks for `books/` beside the executable. Set `VIEWER_BOOKS_ROOT=/absolute/path/to/books` to use another location in either case.
+When run from source, the app reads its library from the repository's `books/` directory.
 
-Build the platform-specific standalone executable with:
+To build a platform-specific standalone executable, run:
 
 ```sh
 scripts/build-binary.sh
 ```
 
-The result is `dist/book-viewer`; book data remains external to the executable.
+After building, the script asks whether to install the viewer. You can also run the install
+script manually:
+
+```sh
+scripts/install-local.sh
+```
 
 ### Dependencies
 

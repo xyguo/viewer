@@ -1,6 +1,6 @@
-"""Executable entry point for the local viewer server."""
+"""Executable entry point shared by Python and standalone builds."""
 
-from book_viewer.server import run_server
+from book_viewer.cli import serve_main
 
 if __name__ == "__main__":
-    raise SystemExit(run_server())
+    serve_main()

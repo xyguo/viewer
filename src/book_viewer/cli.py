@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .builder import build_book
 from .library import build_book_catalog, build_catalog, validate_library, write_manifest_schema
+from .settings import load_server_settings
 
 
 def create_build_parser() -> argparse.ArgumentParser:
@@ -81,6 +82,41 @@ def run_schema(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def create_serve_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run the local parallel book viewer.")
+    parser.add_argument(
+        "--books-root",
+        type=Path,
+        help="Book library directory; overrides VIEWER_BOOKS_ROOT and the saved config",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Viewer config file; defaults to the platform-specific user config",
+    )
+    parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Do not open the viewer in the default browser",
+    )
+    return parser
+
+
+def run_serve(argv: Sequence[str] | None = None) -> int:
+    parser = create_serve_parser()
+    args = parser.parse_args(argv)
+    try:
+        settings = load_server_settings(
+            config_path=args.config,
+            books_root=args.books_root,
+        )
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    from .server import run_server
+
+    return run_server(settings, open_browser=not args.no_open)
+
+
 def build_main() -> None:
     raise SystemExit(run_build())
 
@@ -94,6 +130,4 @@ def schema_main() -> None:
 
 
 def serve_main() -> None:
-    from .server import run_server
-
-    raise SystemExit(run_server())
+    raise SystemExit(run_serve())

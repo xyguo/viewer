@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
+import tomllib
 from pathlib import Path
 from typing import Self
 
-from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+APP_DIRECTORY_NAME = "Parallel Book Viewer"
+CONFIG_ENVIRONMENT_VARIABLE = "VIEWER_CONFIG_FILE"
 
 
 def _running_frozen() -> bool:
@@ -29,6 +43,59 @@ def _default_books_root(static_root: Path) -> Path:
 DEFAULT_STATIC_ROOT = _default_static_root()
 DEFAULT_BOOKS_ROOT = _default_books_root(DEFAULT_STATIC_ROOT)
 HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+
+
+class ViewerConfig(BaseModel):
+    """Small persistent configuration written by the local installer."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    books_root: Path
+
+    @field_validator("books_root", mode="before")
+    @classmethod
+    def expand_books_root(cls, value: object) -> object:
+        if isinstance(value, str):
+            return Path(value).expanduser()
+        return value
+
+    @model_validator(mode="after")
+    def require_absolute_books_root(self) -> Self:
+        if not self.books_root.is_absolute():
+            raise ValueError("books_root must be an absolute path")
+        return self
+
+
+def default_config_path() -> Path:
+    """Return the platform-appropriate per-user configuration path."""
+
+    home = Path.home()
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / APP_DIRECTORY_NAME / "config.toml"
+    if sys.platform == "win32":
+        config_home = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
+        return config_home / APP_DIRECTORY_NAME / "config.toml"
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
+    return config_home / "parallel-book-viewer" / "config.toml"
+
+
+def load_viewer_config(config_path: Path | None = None) -> ViewerConfig | None:
+    """Load a strict optional user configuration file."""
+
+    configured_path = os.environ.get(CONFIG_ENVIRONMENT_VARIABLE)
+    selected_path = config_path or (Path(configured_path) if configured_path else None)
+    is_explicit = selected_path is not None
+    path = (selected_path or default_config_path()).expanduser()
+    if not path.is_file():
+        if is_explicit:
+            raise FileNotFoundError(f"Viewer configuration file does not exist: {path}")
+        return None
+    try:
+        with path.open("rb") as config_file:
+            values = tomllib.load(config_file)
+        return ViewerConfig.model_validate(values)
+    except (tomllib.TOMLDecodeError, ValidationError) as error:
+        raise ValueError(f"Invalid viewer configuration in {path}: {error}") from error
 
 
 class ServerSettings(BaseSettings):
@@ -167,3 +234,21 @@ class ServerSettings(BaseSettings):
             value = f"{self.api_key_scheme} {secret}" if self.api_key_scheme else secret
             headers[self.api_key_header] = value
         return headers
+
+
+def load_server_settings(
+    *,
+    config_path: Path | None = None,
+    books_root: Path | None = None,
+) -> ServerSettings:
+    """Load server settings with CLI, environment, config, then default precedence."""
+
+    if books_root is not None:
+        return ServerSettings(books_root=books_root.expanduser().resolve())
+    environment_settings = ServerSettings()
+    if "books_root" in environment_settings.model_fields_set:
+        return environment_settings
+    config = load_viewer_config(config_path)
+    if config is not None:
+        return environment_settings.model_copy(update={"books_root": config.books_root})
+    return environment_settings

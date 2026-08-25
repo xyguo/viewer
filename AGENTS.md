@@ -13,7 +13,8 @@ Parallel Book Viewer is a lightweight static reader with a small typed Python se
 - `schemas/book.schema.json`: generated, tracked manifest contract.
 - `tests/`: Python, HTTP, frontend-contract, and project-skill tests.
 - `scripts/check.sh`: complete quality gate used locally and by pre-commit.
-- `scripts/build-binary.sh` and `book-viewer.spec`: standalone executable build.
+- `scripts/build-binary.sh`, `scripts/install-local.sh`, and `book-viewer.spec`: standalone
+  executable build and per-user installation.
 - `.agent/skills/create-viewer-book/`: canonical agent workflow for creating and updating book packages.
 - `docs/assets/`: tracked images used by repository documentation.
 - `books/`: ignored external library. `books/.gitkeep` and the complete `books/example/` fixture are tracked.
