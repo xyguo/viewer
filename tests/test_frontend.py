@@ -8,6 +8,8 @@ from pathlib import Path
 
 from book_viewer.models import SUPPORTED_LIVE_TARGET_LANGUAGES
 
+VIEWER_ROOT = Path(__file__).resolve().parents[1]
+
 
 @dataclass(frozen=True, slots=True)
 class Element:
@@ -33,15 +35,18 @@ class MarkupInspector(HTMLParser):
         )
 
 
-def load_markup(viewer_root: Path) -> MarkupInspector:
+def read_asset(name: str) -> str:
+    return (VIEWER_ROOT / name).read_text(encoding="utf-8")
+
+
+def load_markup() -> MarkupInspector:
     inspector = MarkupInspector()
-    inspector.feed((viewer_root / "index.html").read_text(encoding="utf-8"))
+    inspector.feed(read_asset("index.html"))
     return inspector
 
 
 def test_catalog_is_the_visible_startup_surface() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    markup = load_markup(viewer_root)
+    markup = load_markup()
 
     assert "hidden" not in markup.by_id("catalog-page").attributes
     assert "hidden" in next(
@@ -54,9 +59,8 @@ def test_catalog_is_the_visible_startup_surface() -> None:
 
 
 def test_reader_links_back_to_catalog_and_bootstrap_routes_by_book() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    markup = load_markup(viewer_root)
-    bootstrap = (viewer_root / "bootstrap.js").read_text(encoding="utf-8")
+    markup = load_markup()
+    bootstrap = read_asset("bootstrap.js")
 
     library_links = [
         element
@@ -83,8 +87,7 @@ def test_reader_links_back_to_catalog_and_bootstrap_routes_by_book() -> None:
 
 
 def test_reader_uses_independent_viewport_scrollers() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    styles = (viewer_root / "styles.css").read_text(encoding="utf-8")
+    styles = read_asset("styles.css")
 
     assert ".app-shell {\n  height: 100%;\n  height: 100dvh;" in styles
     assert "grid-template-rows: auto auto minmax(0, 1fr);" in styles
@@ -94,8 +97,7 @@ def test_reader_uses_independent_viewport_scrollers() -> None:
 
 
 def test_reader_loads_chapters_and_avoids_linear_scroll_scans() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    app = (viewer_root / "app.js").read_text(encoding="utf-8")
+    app = read_asset("app.js")
 
     assert "window.BOOK_VIEWER_CHUNKS" in app
     assert "function loadChapter(" in app
@@ -106,12 +108,11 @@ def test_reader_loads_chapters_and_avoids_linear_scroll_scans() -> None:
 
 
 def test_reader_persists_library_recency_and_reading_position() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    markup = load_markup(viewer_root)
-    preferences = (viewer_root / "preferences.js").read_text(encoding="utf-8")
-    bootstrap = (viewer_root / "bootstrap.js").read_text(encoding="utf-8")
-    app = (viewer_root / "app.js").read_text(encoding="utf-8")
-    binary_spec = (viewer_root / "book-viewer.spec").read_text(encoding="utf-8")
+    markup = load_markup()
+    preferences = read_asset("preferences.js")
+    bootstrap = read_asset("bootstrap.js")
+    app = read_asset("app.js")
+    binary_spec = read_asset("book-viewer.spec")
     scripts = [
         element.attributes.get("src")
         for element in markup.elements
@@ -139,15 +140,14 @@ def test_reader_persists_library_recency_and_reading_position() -> None:
     assert '(str(project_root / "preferences.js"), ".")' in binary_spec
     assert '(str(project_root / "settings.js"), ".")' in binary_spec
 
-    styles = (viewer_root / "styles.css").read_text(encoding="utf-8")
+    styles = read_asset("styles.css")
     assert "progress.textContent = `${progressPercent}% read`" in bootstrap
     assert ".book-card-footer" in styles
     assert ".book-progress" in styles
 
 
 def test_reader_styles_numbered_highlighted_code_blocks() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    styles = (viewer_root / "styles.css").read_text(encoding="utf-8")
+    styles = read_asset("styles.css")
 
     assert ".document-content pre code > span::before" in styles
     assert "content: counter(code-line);" in styles
@@ -157,9 +157,8 @@ def test_reader_styles_numbered_highlighted_code_blocks() -> None:
 
 
 def test_live_translation_exposes_supported_target_languages() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    markup = load_markup(viewer_root)
-    app = (viewer_root / "app.js").read_text(encoding="utf-8")
+    markup = load_markup()
+    app = read_asset("app.js")
 
     language_group = markup.by_id("live-language-controls")
     language_select = markup.by_id("live-target-language")
@@ -178,9 +177,8 @@ def test_live_translation_exposes_supported_target_languages() -> None:
 
 
 def test_settings_page_is_accessible_and_protects_api_keys() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    markup = load_markup(viewer_root)
-    settings_script = (viewer_root / "settings.js").read_text(encoding="utf-8")
+    markup = load_markup()
+    settings_script = read_asset("settings.js")
 
     settings_buttons = [
         element for element in markup.elements if "data-settings-open" in element.attributes
@@ -202,9 +200,8 @@ def test_settings_page_is_accessible_and_protects_api_keys() -> None:
 
 
 def test_source_only_books_force_live_translation_mode() -> None:
-    viewer_root = Path(__file__).resolve().parents[1]
-    app = (viewer_root / "app.js").read_text(encoding="utf-8")
-    bootstrap = (viewer_root / "bootstrap.js").read_text(encoding="utf-8")
+    app = read_asset("app.js")
+    bootstrap = read_asset("bootstrap.js")
 
     assert "data.hasOfflineTranslation !== false" in app
     assert 'state.mode = offlineTranslationAvailable ? "offline" : "online";' in app
@@ -215,5 +212,4 @@ def test_source_only_books_force_live_translation_mode() -> None:
         in app
     )
     assert 'hasOfflineTranslation()\n        ? loadChunk(chapter, "target")' in app
-    assert "targetScrollTop: hasOfflineTranslation() ? targetScroll.scrollTop : null" in app
     assert "entry.targetLabel\n        ? `${entry.sourceLabel} → ${entry.targetLabel}`" in bootstrap

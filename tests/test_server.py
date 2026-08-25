@@ -19,6 +19,7 @@ from book_viewer.models import TranslationRequest
 from book_viewer.server import create_server, run_server
 from book_viewer.settings import ServerSettings
 from book_viewer.translation import TranslationError
+from tests.fakes import MemoryCredentialStore
 
 
 class FakeTranslator:
@@ -35,20 +36,6 @@ class FailingTranslator:
     def translate(self, request: TranslationRequest) -> str:
         del request
         raise TranslationError("Backend unavailable.")
-
-
-class MemoryCredentialStore:
-    def __init__(self, api_key: str | None = None) -> None:
-        self.api_key = api_key
-
-    def read_api_key(self) -> str | None:
-        return self.api_key
-
-    def write_api_key(self, value: str) -> None:
-        self.api_key = value
-
-    def delete_api_key(self) -> None:
-        self.api_key = None
 
 
 class InterruptingServer:
@@ -192,27 +179,19 @@ def test_server_requires_existing_static_root(tmp_path: Path) -> None:
         create_server(settings)
 
 
-def test_server_translates_and_caches_identical_requests(tmp_path: Path) -> None:
+def test_server_caches_identical_requests_per_target_language(tmp_path: Path) -> None:
     translator = FakeTranslator()
+    french_payload = {**valid_payload(), "target_language": "French"}
     with running_server(tmp_path, translator) as (host, port):
         first_status, first = post_json(host, port, "/api/translate", valid_payload())
         second_status, second = post_json(host, port, "/api/translate", valid_payload())
+        french_status, french = post_json(host, port, "/api/translate", french_payload)
 
     assert first_status == 200
     assert second_status == 200
     assert first == second == {"translation": "Translated."}
-    assert len(translator.requests) == 1
-
-
-def test_server_caches_live_translations_per_target_language(tmp_path: Path) -> None:
-    translator = FakeTranslator()
-    french_payload = {**valid_payload(), "target_language": "French"}
-    with running_server(tmp_path, translator) as (host, port):
-        english_status, _english = post_json(host, port, "/api/translate", valid_payload())
-        french_status, _french = post_json(host, port, "/api/translate", french_payload)
-
-    assert english_status == 200
     assert french_status == 200
+    assert french == {"translation": "Translated."}
     assert [request.target_language for request in translator.requests] == ["English", "French"]
 
 
@@ -254,20 +233,9 @@ def test_server_serves_static_files_with_security_headers(tmp_path: Path) -> Non
 
 
 def test_settings_endpoint_never_returns_stored_secrets(tmp_path: Path) -> None:
-    config_path = tmp_path / "config.toml"
-    config_path.write_text(
-        """schema_version = 1
-
-[translation]
-chat_completions_url = "https://provider.example/v1/chat/completions"
-model = "model"
-""",
-        encoding="utf-8",
-    )
     with running_server(
         tmp_path,
         FakeTranslator(),
-        config_path=config_path,
         credentials=MemoryCredentialStore("super-secret"),
     ) as (host, port):
         status, body, headers = get_text(host, port, "/api/settings")

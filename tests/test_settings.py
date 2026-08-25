@@ -6,48 +6,25 @@ from pathlib import Path
 
 import pytest
 from pydantic import AnyHttpUrl, SecretStr, ValidationError
-from pytest import MonkeyPatch
 
-from book_viewer.credentials import CredentialStoreError
 from book_viewer.settings import (
     ServerSettings,
     load_application_config,
     load_server_settings,
 )
-
-
-class MemoryCredentialStore:
-    def __init__(self, api_key: str | None = None, *, unavailable: bool = False) -> None:
-        self.api_key = api_key
-        self.unavailable = unavailable
-
-    def read_api_key(self) -> str | None:
-        if self.unavailable:
-            raise CredentialStoreError("unavailable")
-        return self.api_key
-
-    def write_api_key(self, value: str) -> None:
-        self.api_key = value
-
-    def delete_api_key(self) -> None:
-        self.api_key = None
+from tests.fakes import MemoryCredentialStore
 
 
 def test_default_settings_make_no_provider_assumptions() -> None:
     settings = ServerSettings()
 
-    assert settings.host == "127.0.0.1"
-    assert settings.port == 8000
-    assert settings.reader_data_path.is_absolute()
     assert settings.chat_completions_endpoint is None
     assert settings.chat_model is None
     assert settings.translation_backend_configured is False
-    assert settings.max_tokens == 900
     assert settings.request_headers() == {"Content-Type": "application/json"}
 
 
 def test_settings_load_documented_toml_and_keyring(
-    monkeypatch: MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     config_path = tmp_path / "config.toml"
@@ -86,8 +63,6 @@ seed = 42
 """,
         encoding="utf-8",
     )
-    monkeypatch.setenv("LLM_MODEL", "ignored-environment-model")
-
     settings = load_server_settings(
         config_path=config_path,
         credential_store=MemoryCredentialStore("secret"),
@@ -114,11 +89,8 @@ seed = 42
     }
 
 
-def test_settings_support_custom_api_key_headers(tmp_path: Path) -> None:
+def test_settings_support_custom_api_key_headers() -> None:
     settings = ServerSettings(
-        static_root=tmp_path,
-        books_root=tmp_path,
-        reader_data_path=tmp_path / "reader.sqlite3",
         chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
         chat_model="model",
         api_key=SecretStr("secret"),

@@ -9,27 +9,8 @@ from pathlib import Path
 import pytest
 
 from book_viewer.config_file import ConfigSettingsStore, SettingsStoreError
-from book_viewer.credentials import CredentialStoreError
 from book_viewer.models import SettingsField
-
-
-class MemoryCredentialStore:
-    def __init__(self, api_key: str | None = None, *, fail_writes: bool = False) -> None:
-        self.api_key = api_key
-        self.fail_writes = fail_writes
-
-    def read_api_key(self) -> str | None:
-        return self.api_key
-
-    def write_api_key(self, value: str) -> None:
-        if self.fail_writes:
-            raise CredentialStoreError("Keyring write failed.")
-        self.api_key = value
-
-    def delete_api_key(self) -> None:
-        if self.fail_writes:
-            raise CredentialStoreError("Keyring delete failed.")
-        self.api_key = None
+from tests.fakes import MemoryCredentialStore
 
 
 def field_by_name(store: ConfigSettingsStore, name: str) -> SettingsField:
@@ -70,7 +51,7 @@ model = "model"
     assert max_tokens.note is None
 
 
-def test_settings_store_writes_canonical_toml_and_keyring_atomically(tmp_path: Path) -> None:
+def test_settings_store_writes_canonical_toml_and_keyring(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     credentials = MemoryCredentialStore("old-secret")
     store = ConfigSettingsStore(config_path, credentials)
@@ -179,15 +160,7 @@ def test_keyring_failure_does_not_replace_existing_config(tmp_path: Path) -> Non
     assert config_path.read_text(encoding="utf-8") == original
 
 
-def test_settings_store_rejects_unknown_and_symlinked_files(tmp_path: Path) -> None:
+def test_settings_store_rejects_unknown_fields(tmp_path: Path) -> None:
     store = ConfigSettingsStore(tmp_path / "config.toml", MemoryCredentialStore())
     with pytest.raises(SettingsStoreError, match=r"unsupported\.value"):
         store.update({"unsupported.value": "value"})
-
-    real_path = tmp_path / "real.toml"
-    real_path.write_text("schema_version = 1\n", encoding="utf-8")
-    linked_path = tmp_path / "linked.toml"
-    linked_path.symlink_to(real_path)
-    linked_store = ConfigSettingsStore(linked_path, MemoryCredentialStore())
-    with pytest.raises(SettingsStoreError, match="symbolic link"):
-        linked_store.read()

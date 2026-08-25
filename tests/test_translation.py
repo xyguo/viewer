@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from pathlib import Path
 from types import TracebackType
 from typing import Self
 
@@ -66,9 +65,8 @@ def translation_request(target_language: LiveTargetLanguage = "English") -> Tran
     )
 
 
-def test_chat_request_uses_context_without_authorization(tmp_path: Path) -> None:
+def test_chat_request_uses_context_without_authorization() -> None:
     settings = ServerSettings(
-        static_root=tmp_path,
         chat_completions_url=AnyHttpUrl("http://localhost:8080/v1/chat/completions"),
         chat_model="configured-model",
         request_timeout_seconds=12.5,
@@ -109,9 +107,8 @@ def test_chat_request_uses_context_without_authorization(tmp_path: Path) -> None
     assert "max_completion_tokens" not in payload
 
 
-def test_chat_request_supports_remote_provider_authentication(tmp_path: Path) -> None:
+def test_chat_request_supports_remote_provider_authentication() -> None:
     settings = ServerSettings(
-        static_root=tmp_path,
         chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
         chat_model="remote-model",
         api_key=SecretStr("secret"),
@@ -129,13 +126,12 @@ def test_chat_request_supports_remote_provider_authentication(tmp_path: Path) ->
     assert upstream_request.get_header("X-provider-feature") == "enabled"
 
 
-def test_chat_request_omits_unset_optional_generation_parameters(tmp_path: Path) -> None:
+def test_chat_request_omits_unset_optional_generation_parameters() -> None:
     opener = FakeUrlOpen(
         FakeResponse({"choices": [{"message": {"role": "assistant", "content": "Done."}}]})
     )
     translator = OpenAICompatibleTranslator(
         ServerSettings(
-            static_root=tmp_path,
             chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
             chat_model="model",
         ),
@@ -151,10 +147,9 @@ def test_chat_request_omits_unset_optional_generation_parameters(tmp_path: Path)
     assert "repeat_penalty" not in payload
 
 
-def test_chat_client_rejects_invalid_response(tmp_path: Path) -> None:
+def test_chat_client_rejects_invalid_response() -> None:
     translator = OpenAICompatibleTranslator(
         ServerSettings(
-            static_root=tmp_path,
             chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
             chat_model="model",
         ),
@@ -164,7 +159,7 @@ def test_chat_client_rejects_invalid_response(tmp_path: Path) -> None:
         translator.translate(translation_request())
 
 
-def test_chat_client_reports_connection_failure(tmp_path: Path) -> None:
+def test_chat_client_reports_connection_failure() -> None:
     def unavailable(
         request: urllib.request.Request,
         *,
@@ -174,7 +169,6 @@ def test_chat_client_reports_connection_failure(tmp_path: Path) -> None:
         raise urllib.error.URLError("offline")
 
     settings = ServerSettings(
-        static_root=tmp_path,
         chat_completions_url=AnyHttpUrl("https://provider.example/chat/completions"),
         chat_model="model",
     )
@@ -183,11 +177,10 @@ def test_chat_client_reports_connection_failure(tmp_path: Path) -> None:
         translator.translate(translation_request())
 
 
-def test_unconfigured_translator_returns_service_unavailable(tmp_path: Path) -> None:
+def test_unconfigured_translator_returns_service_unavailable() -> None:
     with pytest.raises(ValueError, match="URL and model"):
         OpenAICompatibleTranslator(
             ServerSettings(
-                static_root=tmp_path,
                 chat_completions_url=None,
                 chat_model=None,
             )

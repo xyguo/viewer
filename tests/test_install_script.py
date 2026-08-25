@@ -155,25 +155,27 @@ def test_installer_copies_binary_saves_config_and_sets_up_path(tmp_path: Path) -
 def test_reinstall_updates_books_root_without_overwriting_other_settings(tmp_path: Path) -> None:
     binary = tmp_path / "book-viewer"
     _fake_executable(binary)
-    first_books_root = tmp_path / "first-books"
     second_books_root = tmp_path / "second-books"
-    first_books_root.mkdir()
     second_books_root.mkdir()
-    first_result, user_home = _run_installer(
-        tmp_path,
-        "--binary",
-        str(binary),
-        "--books-root",
-        str(first_books_root),
-        "--no-path",
-    )
-    assert first_result.returncode == 0, first_result.stderr
+    user_home = tmp_path / "home"
+    user_home.mkdir()
+    installed_binary = _installed_binary(user_home)
+    installed_binary.parent.mkdir(parents=True)
+    _fake_executable(installed_binary)
     config_path, _reader_data_path = _application_paths(user_home)
-    with config_path.open("a", encoding="utf-8") as config_file:
-        config_file.write(
-            '\n[translation]\nmodel = "preserved-model"\n'
-            'chat_completions_url = "http://localhost:8080/v1/chat/completions"\n'
-        )
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        f'''schema_version = 1
+
+[viewer]
+books_root = "{tmp_path / "first-books"}"
+
+[translation]
+model = "preserved-model"
+chat_completions_url = "http://localhost:8080/v1/chat/completions"
+''',
+        encoding="utf-8",
+    )
 
     second_result, _user_home = _run_installer(
         tmp_path,
@@ -189,27 +191,8 @@ def test_reinstall_updates_books_root_without_overwriting_other_settings(tmp_pat
         config = tomllib.load(config_file)
     assert config["viewer"]["books_root"] == str(second_books_root)
     assert config["translation"]["model"] == "preserved-model"
-
-
-def test_installer_can_skip_shell_integration(tmp_path: Path) -> None:
-    binary = tmp_path / "book-viewer"
-    _fake_executable(binary)
-    books_root = tmp_path / "books"
-    books_root.mkdir()
-
-    result, user_home = _run_installer(
-        tmp_path,
-        "--binary",
-        str(binary),
-        "--books-root",
-        str(books_root),
-        "--no-path",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert _installed_binary(user_home).is_file()
     assert not (user_home / ".zprofile").exists()
-    assert "Skipped PATH setup" in result.stdout
+    assert "Skipped PATH setup" in second_result.stdout
 
 
 def test_build_script_offers_and_runs_installer(tmp_path: Path) -> None:
