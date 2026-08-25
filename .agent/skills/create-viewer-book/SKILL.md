@@ -1,11 +1,11 @@
 ---
 name: create-viewer-book
-description: Convert a source document into a faithful, sentence-aligned bilingual book package under books/ for the Parallel Book Viewer. Use when ingesting, OCRing, transcribing, translating, rebuilding, or repairing viewer book content and metadata; do not use for viewer application development alone.
+description: Convert a source document into a segmented Parallel Book Viewer package under books/, with an optional faithful sentence-aligned offline translation. Use when ingesting, OCRing, transcribing, translating, rebuilding, or repairing viewer book content and metadata; do not use for viewer application development alone.
 ---
 
 # Create Viewer Book
 
-Produce a complete external book package that the current viewer can build and render. Treat the repository's Pydantic models, JSON Schema, and builder as the authority whenever this skill differs from the checked-out code.
+Produce a complete external book package that the current viewer can build and render. A source-only package uses live translation; a bilingual package also supports its aligned offline edition. Treat the repository's Pydantic models, JSON Schema, and builder as the authority whenever this skill differs from the checked-out code.
 
 ## Load the applicable contract
 
@@ -17,14 +17,14 @@ Produce a complete external book package that the current viewer can build and r
 ## Workflow
 
 1. Locate the viewer repository root by finding `schemas/book.schema.json`, `src/book_viewer/`, and `books/`. Inspect the current schema and builder before choosing fields or commands.
-2. Resolve the requested source language, target language, title, and book slug from the user's request and source document. Ask only when a missing choice would materially change the output.
-3. Create `books/<slug>/book.json`, `source.md`, `target.md`, and any book-local assets. Keep temporary OCR or translation fragments outside the final book package.
+2. Resolve the source language, title, book slug, and whether the user wants an offline translation. Resolve a target language only for an offline translation. Ask only when a missing choice would materially change the output.
+3. Create `books/<slug>/book.json`, `source.md`, any book-local assets, and `target.md` when an offline translation is requested. Keep temporary OCR or translation fragments outside the final book package.
 4. Transcribe the complete source document into `source.md`. Preserve its heading hierarchy, lists, tables, captions, footnotes, citations, mathematical notation, display equations, explicit equation numbers, and figure order to the degree supported by Markdown and MathJax.
-5. Assign deterministic segment IDs to approximately sentence-sized source units. Translate each unit faithfully into exactly one target unit with the same ID and order. Preserve technical meaning, notation, references, and deliberate repetition.
-6. Audit completeness against the input document, then audit source and target mechanically. Resolve every missing page or section, duplicate or mismatched segment, altered equation tag, missing asset, placeholder, and untranslated passage.
+5. Assign deterministic segment IDs to approximately sentence-sized source units. For an offline edition, translate each unit faithfully into exactly one target unit with the same ID and order. Preserve technical meaning, notation, references, and deliberate repetition.
+6. Audit completeness against the input document and audit the source mechanically. For an offline edition, also audit source-to-target alignment. Resolve every missing page or section, duplicate or mismatched segment, altered equation tag, missing asset, placeholder, and untranslated passage that applies to the package.
 7. Run the repository builder. It generates `document-data.js`, chapter chunk scripts, and the catalog. Generated JavaScript is build output and must not be hand-authored.
-8. Run manifest validation, the project quality gate, and a browser smoke test. Finish only when the book opens from the catalog and its structure, mathematics, figures, navigation, and sentence mapping work.
+8. Run manifest validation, the project quality gate, and a browser smoke test. Finish only when the book opens from the catalog and its structure, mathematics, figures, navigation, and sentence activation work.
 
 ## Completion report
 
-Report the book directory, source and target Markdown paths, aligned segment count, chapter count, validation results, and any source limitations that remain. Ordinary book data under `books/` is intentionally external and Git-ignored. The canonical `books/example/` fixture is tracked; preserve this boundary unless the user explicitly changes it.
+Report the book directory, source Markdown path, optional target Markdown path, segment count, chapter count, translation mode, validation results, and any source limitations that remain. Ordinary book data under `books/` is intentionally external and Git-ignored. The canonical `books/example/` fixture is tracked; preserve this boundary unless the user explicitly changes it.

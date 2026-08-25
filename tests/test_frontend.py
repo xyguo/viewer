@@ -133,7 +133,7 @@ def test_reader_persists_library_recency_and_reading_position() -> None:
     assert "BookViewerPreferences.touch(requestedSlug)" in bootstrap
     assert "state.resumePosition = requestedSegment ? null : savedReadingPosition();" in app
     assert "sourceScrollTop: sourceScroll.scrollTop" in app
-    assert "targetScrollTop: targetScroll.scrollTop" in app
+    assert "targetScrollTop: hasOfflineTranslation() ? targetScroll.scrollTop : null" in app
     assert "progressPercent: readingProgressPercent(segmentId)" in app
     assert 'window.addEventListener("pagehide", flushReadingPosition)' in app
     assert '(str(project_root / "preferences.js"), ".")' in binary_spec
@@ -174,3 +174,21 @@ def test_live_translation_exposes_supported_target_languages() -> None:
     assert "target_language: targetLanguage" in app
     assert 'liveTargetLanguageSelect.addEventListener("change"' in app
     assert "book-viewer-live:${data.slug}:${targetLanguage}" in app
+
+
+def test_source_only_books_force_live_translation_mode() -> None:
+    viewer_root = Path(__file__).resolve().parents[1]
+    app = (viewer_root / "app.js").read_text(encoding="utf-8")
+    bootstrap = (viewer_root / "bootstrap.js").read_text(encoding="utf-8")
+
+    assert "data.hasOfflineTranslation !== false" in app
+    assert 'state.mode = offlineTranslationAvailable ? "offline" : "online";' in app
+    assert 'state.view = offlineTranslationAvailable ? "both" : "source";' in app
+    assert 'if (mode === "offline" && !hasOfflineTranslation()) return;' in app
+    assert (
+        'button.disabled = button.dataset.modeChoice === "offline" && !hasOfflineTranslation();'
+        in app
+    )
+    assert 'hasOfflineTranslation()\n        ? loadChunk(chapter, "target")' in app
+    assert "targetScrollTop: hasOfflineTranslation() ? targetScroll.scrollTop : null" in app
+    assert "entry.targetLabel\n        ? `${entry.sourceLabel} → ${entry.targetLabel}`" in bootstrap

@@ -81,28 +81,36 @@
       return;
     }
 
+    const offlineTranslationAvailable = hasOfflineTranslation();
+    state.mode = offlineTranslationAvailable ? "offline" : "online";
+    state.view = offlineTranslationAvailable ? "both" : "source";
+    state.offlineView = offlineTranslationAvailable ? "both" : "source";
+    shell.dataset.mode = state.mode;
+    shell.dataset.view = state.view;
+
     document.title = data.readerTitle;
     requiredElement('meta[name="description"]', HTMLMetaElement).content = data.description;
     brandTitle.textContent = data.readerTitle;
     sourceHeading.textContent = data.sourceLabel;
-    targetHeading.textContent = data.targetLabel;
+    targetHeading.textContent = data.targetLabel || "Translation";
     sourceViewButton.textContent = data.sourceLabel;
-    targetViewButton.textContent = data.targetLabel;
+    targetViewButton.textContent = data.targetLabel || "Translation";
     sourceContent.lang = data.sourceHtmlLang;
-    targetContent.lang = data.targetHtmlLang;
+    targetContent.lang = data.targetHtmlLang || "";
     const supportedLiveLanguages = [...liveTargetLanguageSelect.options].map(
       (option) => option.value,
     );
-    state.liveTargetLanguage = supportedLiveLanguages.includes(data.targetLanguage)
-      ? data.targetLanguage
-      : "English";
+    state.liveTargetLanguage =
+      data.targetLanguage && supportedLiveLanguages.includes(data.targetLanguage)
+        ? data.targetLanguage
+        : "English";
     liveTargetLanguageSelect.value = state.liveTargetLanguage;
     indexChapters();
     buildToc();
     installEvents();
     updateTocAccessibility();
     updateControls();
-    countLabel.textContent = `${data.segmentCount.toLocaleString()} aligned segments`;
+    countLabel.textContent = `${data.segmentCount.toLocaleString()} ${offlineTranslationAvailable ? "aligned segments" : "segments"}`;
     statusLabel.textContent = "Loading chapter";
 
     const hashMatch = location.hash.match(/^#seg=(.+)$/);
@@ -116,6 +124,10 @@
       return;
     }
     void loadChapter(initialChapterId, requestedSegment);
+  }
+
+  function hasOfflineTranslation() {
+    return data.hasOfflineTranslation !== false;
   }
 
   function indexChapters() {
@@ -153,8 +165,13 @@
         segment.querySelector("a, button, input, select, textarea, [tabindex]"),
       );
       segment.setAttribute("role", hasInteractiveChild ? "group" : "button");
-      const counterpartLabel = language === "source" ? data.targetLabel : data.sourceLabel;
-      segment.setAttribute("aria-label", `Show ${counterpartLabel} counterpart`);
+      if (!hasOfflineTranslation() && language === "source") {
+        segment.setAttribute("aria-label", `Translate ${data.sourceLanguage} sentence`);
+      } else {
+        const counterpartLabel =
+          language === "source" ? data.targetLabel || "translation" : data.sourceLabel;
+        segment.setAttribute("aria-label", `Show ${counterpartLabel} counterpart`);
+      }
     });
 
     state.segmentLists[language] = segments;
@@ -281,6 +298,9 @@
     if (pending) return pending;
 
     const dataFile = language === "source" ? chapter.sourceDataFile : chapter.targetDataFile;
+    if (!dataFile) {
+      return Promise.reject(new Error(`The ${language} chapter data is not available.`));
+    }
     /** @type {Promise<BookChunk>} */
     const promise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
@@ -353,23 +373,32 @@
     cancelLiveTranslation();
 
     try {
+      const sourceChunkPromise = loadChunk(chapter, "source");
+      const targetChunkPromise = hasOfflineTranslation()
+        ? loadChunk(chapter, "target")
+        : Promise.resolve(null);
       const [sourceChunk, targetChunk] = await Promise.all([
-        loadChunk(chapter, "source"),
-        loadChunk(chapter, "target"),
+        sourceChunkPromise,
+        targetChunkPromise,
       ]);
       await state.mathQueue.catch(() => {});
       if (requestId !== state.chapterRequestId) return;
 
-      window.MathJax?.typesetClear?.([sourceContent, targetContent]);
+      window.MathJax?.typesetClear?.(currentContentElements());
       sourceContent.innerHTML = sourceChunk.html;
-      targetContent.innerHTML = targetChunk.html;
+      targetContent.innerHTML = targetChunk?.html || "";
       sourceContent.querySelectorAll("img").forEach(prepareImage);
-      targetContent.querySelectorAll("img").forEach(prepareImage);
+      if (targetChunk) targetContent.querySelectorAll("img").forEach(prepareImage);
       state.currentChapterId = chapterId;
       state.activeId = null;
       prepareSegments("source", sourceContent);
-      prepareSegments("target", targetContent);
-      validateAlignment();
+      if (targetChunk) {
+        prepareSegments("target", targetContent);
+        validateAlignment();
+      } else {
+        state.segmentLists.target = [];
+        state.segmentMaps.target = new Map();
+      }
       sourceScroll.scrollTop = 0;
       targetScroll.scrollTop = 0;
       updateChapterControls();
@@ -414,13 +443,19 @@
       .catch(() => {})
       .then(async () => {
         if (requestId !== state.chapterRequestId || chapterId !== state.currentChapterId) return;
-        mathJax.typesetClear?.([sourceContent, targetContent]);
-        await typesetPromise([sourceContent, targetContent]);
+        const elements = currentContentElements();
+        mathJax.typesetClear?.(elements);
+        await typesetPromise(elements);
       })
       .catch(() => {
         showToast("Some mathematical notation could not be rendered.");
       });
     return state.mathQueue;
+  }
+
+  /** @returns {HTMLElement[]} */
+  function currentContentElements() {
+    return hasOfflineTranslation() ? [sourceContent, targetContent] : [sourceContent];
   }
 
   /** @returns {Promise<void>} */
@@ -436,7 +471,7 @@
         const chapter = data.chapters[index];
         if (!chapter) return;
         void loadChunk(chapter, "source").catch(() => {});
-        void loadChunk(chapter, "target").catch(() => {});
+        if (hasOfflineTranslation()) void loadChunk(chapter, "target").catch(() => {});
       });
     };
     if (window.requestIdleCallback) {
@@ -465,7 +500,9 @@
     const chapterIndex = state.chapterIndexes.get(chapter.id);
     if (chapterIndex === undefined) return;
     chapterPosition.textContent = `${chapterIndex + 1} / ${data.chapters.length}`;
-    chapterPosition.title = `${chapter.sourceTitle} / ${chapter.targetTitle}`;
+    chapterPosition.title = chapter.targetTitle
+      ? `${chapter.sourceTitle} / ${chapter.targetTitle}`
+      : chapter.sourceTitle;
     previousChapter.disabled = chapterIndex === 0;
     nextChapter.disabled = chapterIndex === data.chapters.length - 1;
   }
@@ -508,7 +545,7 @@
       }
       const label =
         otherLanguage === "target"
-          ? `${data.targetLabel} translation`
+          ? `${data.targetLabel || "Offline"} translation`
           : `${data.sourceLabel} source`;
       showPopover(segment, label, counterpart.innerHTML, true);
     }
@@ -530,6 +567,7 @@
   /** @param {string | undefined} mode */
   function setMode(mode) {
     if (mode !== "offline" && mode !== "online") return;
+    if (mode === "offline" && !hasOfflineTranslation()) return;
     if (state.mode === mode) return;
 
     hidePopover(false);
@@ -600,6 +638,7 @@
       const selected = button.dataset.modeChoice === state.mode;
       button.classList.toggle("is-selected", selected);
       button.setAttribute("aria-pressed", String(selected));
+      button.disabled = button.dataset.modeChoice === "offline" && !hasOfflineTranslation();
     });
 
     matchingElements(document, "[data-view-choice]", HTMLButtonElement).forEach((button) => {
@@ -695,7 +734,7 @@
 
     state.syncLock = true;
     if (hasSourcePosition) sourceScroll.scrollTop = sourceScrollTop;
-    if (hasTargetPosition) targetScroll.scrollTop = targetScrollTop;
+    if (hasOfflineTranslation() && hasTargetPosition) targetScroll.scrollTop = targetScrollTop;
     window.setTimeout(() => {
       state.syncLock = false;
     }, 50);
@@ -731,7 +770,7 @@
       segmentId,
       progressPercent: readingProgressPercent(segmentId),
       sourceScrollTop: sourceScroll.scrollTop,
-      targetScrollTop: targetScroll.scrollTop,
+      targetScrollTop: hasOfflineTranslation() ? targetScroll.scrollTop : null,
     });
   }
 
@@ -862,7 +901,9 @@
 
   function updateVisibleProgress() {
     if (state.view !== "target") updateProgress("source");
-    if (state.mode === "offline" && state.view !== "source") updateProgress("target");
+    if (hasOfflineTranslation() && state.mode === "offline" && state.view !== "source") {
+      updateProgress("target");
+    }
   }
 
   /** @param {string | null | undefined} segmentId */

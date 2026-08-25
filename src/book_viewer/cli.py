@@ -12,7 +12,7 @@ from .settings import load_server_settings
 
 
 def create_build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Build static data for a translated book.")
+    parser = argparse.ArgumentParser(description="Build static data for a segmented book.")
     parser.add_argument(
         "--manifest",
         type=Path,
@@ -36,8 +36,9 @@ def run_build(argv: Sequence[str] | None = None) -> int:
         default_book=args.default_book,
     )
     book_label = "book" if catalog_result.book_count == 1 else "books"
+    segment_label = "aligned segments" if result.has_offline_translation else "segments"
     print(
-        f"Built {result.output_path} with {result.segment_count} aligned segments "
+        f"Built {result.output_path} with {result.segment_count} {segment_label} "
         f"across {result.chapter_count} chapters."
     )
     print(f"Built {book_catalog_result.output_path} with a portable one-book catalog.")

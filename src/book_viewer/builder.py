@@ -148,9 +148,8 @@ def split_rendered_chapters(html: str) -> list[str]:
     return [chapter for chapter in chapters if chapter]
 
 
-def validate_rendered_segments(source_html: str, target_html: str) -> list[str]:
+def validate_rendered_source_segments(source_html: str) -> list[str]:
     source_ids = rendered_segment_ids(source_html)
-    target_ids = rendered_segment_ids(target_html)
     if not source_ids:
         raise ValueError(
             "No rendered .segment[data-seg] elements were found in the source document."
@@ -159,6 +158,12 @@ def validate_rendered_segments(source_html: str, target_html: str) -> list[str]:
         raise ValueError(
             "Duplicate rendered sentence segment IDs were found in the source document."
         )
+    return source_ids
+
+
+def validate_rendered_segments(source_html: str, target_html: str) -> list[str]:
+    source_ids = validate_rendered_source_segments(source_html)
+    target_ids = rendered_segment_ids(target_html)
     if len(target_ids) != len(set(target_ids)):
         raise ValueError(
             "Duplicate rendered sentence segment IDs were found in the target document."
@@ -206,6 +211,29 @@ def _validate_local_images(
     return image_paths
 
 
+def validate_source_markdown_contract(
+    markdown: str,
+    document_dir: Path,
+    *,
+    static_root: Path | None = None,
+    asset_rewrites: dict[str, str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Validate source-level equation and asset invariants."""
+
+    tags = TAG_RE.findall(markdown)
+    if len(tags) != len(set(tags)):
+        raise ValueError("Duplicate equation tags were found in the document.")
+
+    rewrites = asset_rewrites or {}
+    images = _validate_local_images(
+        markdown,
+        document_dir,
+        static_root=static_root,
+        asset_rewrites=rewrites,
+    )
+    return tags, images
+
+
 def validate_markdown_contract(
     source_markdown: str,
     target_markdown: str,
@@ -217,28 +245,22 @@ def validate_markdown_contract(
 ) -> None:
     """Validate structural invariants that must match across both editions."""
 
-    source_tags = TAG_RE.findall(source_markdown)
-    target_tags = TAG_RE.findall(target_markdown)
+    source_tags, source_images = validate_source_markdown_contract(
+        source_markdown,
+        source_dir,
+        static_root=static_root,
+        asset_rewrites=asset_rewrites,
+    )
+    target_tags, target_images = validate_source_markdown_contract(
+        target_markdown,
+        target_dir,
+        static_root=static_root,
+        asset_rewrites=asset_rewrites,
+    )
     if source_tags != target_tags:
         raise ValueError(
             f"Equation tags differ between editions: source={source_tags}, target={target_tags}."
         )
-    if len(source_tags) != len(set(source_tags)):
-        raise ValueError("Duplicate equation tags were found in the paired documents.")
-
-    rewrites = asset_rewrites or {}
-    source_images = _validate_local_images(
-        source_markdown,
-        source_dir,
-        static_root=static_root,
-        asset_rewrites=rewrites,
-    )
-    target_images = _validate_local_images(
-        target_markdown,
-        target_dir,
-        static_root=static_root,
-        asset_rewrites=rewrites,
-    )
     if source_images != target_images:
         raise ValueError("Figure paths or ordering differ between the source and target documents.")
 
@@ -313,7 +335,7 @@ def build_book(
     renderer: MarkdownRenderer = render_markdown,
     generated_at: datetime | None = None,
 ) -> BuildResult:
-    """Build one book from its manifest and sentence-aligned Markdown editions."""
+    """Build one book from segmented source Markdown and an optional translation."""
 
     resolved_manifest_path = manifest_path.resolve()
     manifest = load_manifest(resolved_manifest_path)
@@ -324,31 +346,46 @@ def build_book(
     static_root = books_dir.parent if books_dir.name == "books" else resolved_manifest_path.parent
 
     source_markdown = source_path.read_text(encoding="utf-8")
-    target_markdown = target_path.read_text(encoding="utf-8")
-    validate_markdown_contract(
-        source_markdown,
-        target_markdown,
-        source_path.parent,
-        target_path.parent,
-        static_root=static_root,
-        asset_rewrites=manifest.asset_rewrites,
-    )
+    if target_path is None:
+        target_markdown = None
+        validate_source_markdown_contract(
+            source_markdown,
+            source_path.parent,
+            static_root=static_root,
+            asset_rewrites=manifest.asset_rewrites,
+        )
+    else:
+        target_markdown = target_path.read_text(encoding="utf-8")
+        validate_markdown_contract(
+            source_markdown,
+            target_markdown,
+            source_path.parent,
+            target_path.parent,
+            static_root=static_root,
+            asset_rewrites=manifest.asset_rewrites,
+        )
 
     source_rendered = renderer(source_markdown)
-    target_rendered = renderer(target_markdown)
-    segment_ids = validate_rendered_segments(source_rendered, target_rendered)
+    target_rendered = renderer(target_markdown) if target_markdown is not None else None
+    segment_ids = (
+        validate_rendered_segments(source_rendered, target_rendered)
+        if target_rendered is not None
+        else validate_rendered_source_segments(source_rendered)
+    )
     source_html = rewrite_asset_paths(
         prefix_html_ids(source_rendered, manifest.source.html_id_prefix),
         manifest.asset_rewrites,
     )
-    target_html = rewrite_asset_paths(
-        prefix_html_ids(target_rendered, manifest.target.html_id_prefix),
-        manifest.asset_rewrites,
-    )
+    target_html = None
+    if target_rendered is not None and manifest.target is not None:
+        target_html = rewrite_asset_paths(
+            prefix_html_ids(target_rendered, manifest.target.html_id_prefix),
+            manifest.asset_rewrites,
+        )
 
     source_chapters = split_rendered_chapters(source_html)
-    target_chapters = split_rendered_chapters(target_html)
-    if len(source_chapters) != len(target_chapters):
+    target_chapters = split_rendered_chapters(target_html) if target_html is not None else None
+    if target_chapters is not None and len(source_chapters) != len(target_chapters):
         raise ValueError(
             "Chapter boundaries differ between editions: "
             f"source={len(source_chapters)}, target={len(target_chapters)}."
@@ -365,26 +402,30 @@ def build_book(
     segment_to_chapter: dict[str, str] = {}
     chunk_outputs: dict[str, str] = {}
 
-    for index, (source_chapter, target_chapter) in enumerate(
-        zip(source_chapters, target_chapters, strict=True),
-        start=1,
-    ):
-        chapter_segment_ids = validate_rendered_segments(source_chapter, target_chapter)
+    for index, source_chapter in enumerate(source_chapters, start=1):
+        target_chapter = target_chapters[index - 1] if target_chapters is not None else None
+        chapter_segment_ids = (
+            validate_rendered_segments(source_chapter, target_chapter)
+            if target_chapter is not None
+            else validate_rendered_source_segments(source_chapter)
+        )
         chapter_id = chapter_segment_ids[0]
         source_headings = rendered_headings(source_chapter)
-        target_headings = rendered_headings(target_chapter)
+        target_headings = rendered_headings(target_chapter) if target_chapter is not None else []
         source_title = source_headings[0].title if source_headings else chapter_id
-        target_title = target_headings[0].title if target_headings else chapter_id
-        source_name = f"{index:03d}-source.js"
-        target_name = f"{index:03d}-target.js"
-
-        chunk_specs: tuple[
-            tuple[Literal["source", "target"], str, str],
-            tuple[Literal["source", "target"], str, str],
-        ] = (
-            ("source", source_name, source_chapter),
-            ("target", target_name, target_chapter),
+        target_title = (
+            (target_headings[0].title if target_headings else chapter_id)
+            if target_chapter is not None
+            else None
         )
+        source_name = f"{index:03d}-source.js"
+        target_name = f"{index:03d}-target.js" if target_chapter is not None else None
+
+        chunk_specs: list[tuple[Literal["source", "target"], str, str]] = [
+            ("source", source_name, source_chapter)
+        ]
+        if target_name is not None and target_chapter is not None:
+            chunk_specs.append(("target", target_name, target_chapter))
         for language, name, chapter_html in chunk_specs:
             chunk_payload = BookChunkPayload(
                 schema_version=BOOK_SCHEMA_VERSION,
@@ -403,7 +444,9 @@ def build_book(
                 source_title=source_title,
                 target_title=target_title,
                 source_data_file=(browser_chunk_dir / source_name).as_posix(),
-                target_data_file=(browser_chunk_dir / target_name).as_posix(),
+                target_data_file=(browser_chunk_dir / target_name).as_posix()
+                if target_name is not None
+                else None,
                 segment_ids=chapter_segment_ids,
             )
         )
@@ -427,9 +470,10 @@ def build_book(
         source_language=manifest.source.language,
         source_label=manifest.source.label,
         source_html_lang=manifest.source.html_lang,
-        target_language=manifest.target.language,
-        target_label=manifest.target.label,
-        target_html_lang=manifest.target.html_lang,
+        has_offline_translation=manifest.target is not None,
+        target_language=manifest.target.language if manifest.target is not None else None,
+        target_label=manifest.target.label if manifest.target is not None else None,
+        target_html_lang=manifest.target.html_lang if manifest.target is not None else None,
         segment_count=len(segment_ids),
         initial_chapter_id=chapters[0].id,
         chapters=chapters,
@@ -449,4 +493,5 @@ def build_book(
         output_path=output_path,
         segment_count=len(segment_ids),
         chapter_count=len(chapters),
+        has_offline_translation=manifest.target is not None,
     )
