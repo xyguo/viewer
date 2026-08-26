@@ -1,7 +1,13 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
   "files": {
-    "includes": ["app.js", "bootstrap.js", "preferences.js", "settings.js"]
+    "includes": [
+      "app.js",
+      "bootstrap.js",
+      "dom.js",
+      "preferences.js",
+      "settings.js"
+    ]
   },
   "formatter": {
     "indentStyle": "space",

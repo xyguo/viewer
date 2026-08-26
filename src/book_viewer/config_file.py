@@ -372,7 +372,16 @@ class ConfigSettingsStore:
         temporary_path: Path | None = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            serialized = tomli_w.dumps(config.model_dump(mode="json", exclude_none=True))
+            serialized_values: dict[str, object] = {
+                "schema_version": config.schema_version,
+                **config.model_dump(
+                    mode="json",
+                    exclude={"schema_version"},
+                    exclude_defaults=True,
+                    exclude_none=True,
+                ),
+            }
+            serialized = tomli_w.dumps(serialized_values)
             with tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",

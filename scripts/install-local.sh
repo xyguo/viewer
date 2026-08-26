@@ -81,76 +81,24 @@ done
 BINARY_PATH=$(absolute_existing_path "$BINARY_PATH")
 BOOKS_ROOT=$(absolute_existing_path "$BOOKS_ROOT")
 
-case "$BOOKS_ROOT" in
-    *'"'* | *'\'* | *'
-'*) fail "book library path cannot contain quotes, backslashes, or line breaks" ;;
-esac
-
 USER_HOME=${VIEWER_INSTALL_HOME:-${HOME:?HOME is not set}}
-case "$(uname -s)" in
-    Darwin)
-        CONFIG_ROOT="$USER_HOME/Library/Application Support/Parallel Book Viewer"
-        ;;
-    *)
-        CONFIG_HOME=${XDG_CONFIG_HOME:-$USER_HOME/.config}
-        CONFIG_ROOT="$CONFIG_HOME/parallel-book-viewer"
-        ;;
-esac
-
 INSTALL_DIRECTORY="$USER_HOME/.local/bin"
 INSTALLED_BINARY="$INSTALL_DIRECTORY/book-viewer"
-CONFIG_PATH="$CONFIG_ROOT/config.toml"
 BINARY_TEMP="$INSTALLED_BINARY.tmp.$$"
-CONFIG_TEMP="$CONFIG_PATH.tmp.$$"
 
-mkdir -p "$INSTALL_DIRECTORY" "$CONFIG_ROOT"
-trap 'rm -f "$BINARY_TEMP" "$CONFIG_TEMP"' EXIT HUP INT TERM
+mkdir -p "$INSTALL_DIRECTORY"
+trap 'rm -f "$BINARY_TEMP"' EXIT HUP INT TERM
 install -m 755 "$BINARY_PATH" "$BINARY_TEMP"
-mv "$BINARY_TEMP" "$INSTALLED_BINARY"
-umask 077
-if [ -f "$CONFIG_PATH" ]; then
-    awk -v books_root="$BOOKS_ROOT" '
-        BEGIN {
-            print "schema_version = 1"
-            in_root = 1
-            in_viewer = 0
-            saw_viewer = 0
-            wrote_books_root = 0
-        }
-        /^\[[^]]+\][[:space:]]*$/ {
-            if (in_viewer && !wrote_books_root) {
-                print "books_root = \"" books_root "\""
-                wrote_books_root = 1
-            }
-            in_root = 0
-            in_viewer = ($0 == "[viewer]")
-            if (in_viewer) saw_viewer = 1
-            print
-            next
-        }
-        in_root && /^[[:space:]]*(schema_version|books_root)[[:space:]]*=/ { next }
-        in_viewer && /^[[:space:]]*books_root[[:space:]]*=/ {
-            if (!wrote_books_root) {
-                print "books_root = \"" books_root "\""
-                wrote_books_root = 1
-            }
-            next
-        }
-        { print }
-        END {
-            if (in_viewer && !wrote_books_root) {
-                print "books_root = \"" books_root "\""
-            } else if (!saw_viewer) {
-                print ""
-                print "[viewer]"
-                print "books_root = \"" books_root "\""
-            }
-        }
-    ' "$CONFIG_PATH" > "$CONFIG_TEMP"
-else
-    printf 'schema_version = 1\n\n[viewer]\nbooks_root = "%s"\n' "$BOOKS_ROOT" > "$CONFIG_TEMP"
+if ! CONFIGURE_ERROR=$(HOME="$USER_HOME" "$BINARY_TEMP" --installer-books-root "$BOOKS_ROOT" 2>&1); then
+    case "$CONFIGURE_ERROR" in
+        *"unrecognized arguments: --installer-books-root"*)
+            fail "viewer executable is out of date; rebuild it with scripts/build-binary.sh"
+            ;;
+    esac
+    [ -z "$CONFIGURE_ERROR" ] || printf '%s\n' "$CONFIGURE_ERROR" >&2
+    fail "viewer configuration could not be updated"
 fi
-mv "$CONFIG_TEMP" "$CONFIG_PATH"
+mv "$BINARY_TEMP" "$INSTALLED_BINARY"
 trap - EXIT HUP INT TERM
 
 echo "Installed viewer: $INSTALLED_BINARY"

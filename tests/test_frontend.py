@@ -119,7 +119,7 @@ def test_reader_persists_library_recency_and_reading_position() -> None:
         if element.tag == "script" and element.attributes.get("src")
     ]
 
-    assert scripts[-4:] == ["preferences.js", "settings.js", "app.js", "bootstrap.js"]
+    assert scripts[-5:] == ["dom.js", "preferences.js", "settings.js", "app.js", "bootstrap.js"]
     assert 'const STORAGE_PREFIX = "book-viewer-reading:v1:";' in preferences
     assert 'const READING_STATES_URL = "/api/reading-states";' in preferences
     assert "localStorage.getItem(storageKey(slug))" in preferences
@@ -139,11 +139,14 @@ def test_reader_persists_library_recency_and_reading_position() -> None:
     assert 'window.addEventListener("pagehide", flushReadingPosition)' in app
     assert '(str(project_root / "preferences.js"), ".")' in binary_spec
     assert '(str(project_root / "settings.js"), ".")' in binary_spec
+    assert '(str(project_root / "dom.js"), ".")' in binary_spec
+    assert '(str(project_root / "catalog.css"), ".")' in binary_spec
+    assert '(str(project_root / "settings.css"), ".")' in binary_spec
 
-    styles = read_asset("styles.css")
+    catalog_styles = read_asset("catalog.css")
     assert "progress.textContent = `${progressPercent}% read`" in bootstrap
-    assert ".book-card-footer" in styles
-    assert ".book-progress" in styles
+    assert ".book-card-footer" in catalog_styles
+    assert ".book-progress" in catalog_styles
 
 
 def test_reader_styles_numbered_highlighted_code_blocks() -> None:

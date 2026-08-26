@@ -144,6 +144,28 @@ def test_run_serve_can_remove_the_keyring_secret_and_exit(monkeypatch: MonkeyPat
     assert deleted is True
 
 
+def test_run_serve_can_save_the_installer_books_root(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    books_root = tmp_path / "books"
+    updates: list[dict[str, str | None]] = []
+
+    class FakeSettingsStore:
+        def __init__(self, path: Path) -> None:
+            assert path == config_path
+
+        def update(self, values: dict[str, str | None]) -> None:
+            updates.append(values)
+
+    monkeypatch.setattr(cli, "default_config_path", lambda: config_path)
+    monkeypatch.setattr(cli, "ConfigSettingsStore", FakeSettingsStore)
+
+    assert cli.run_serve(["--installer-books-root", str(books_root)]) == 0
+    assert updates == [{"viewer.books_root": str(books_root.resolve())}]
+
+
 def test_validate_and_schema_commands(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,

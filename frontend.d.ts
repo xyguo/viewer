@@ -148,6 +148,18 @@ interface BookViewerApi {
   showLoadError(message: string): void;
 }
 
+interface BookViewerDomApi {
+  requiredElement<ElementType extends Element>(
+    selector: string,
+    elementType: new () => ElementType,
+  ): ElementType;
+  matchingElements<ElementType extends Element>(
+    root: ParentNode,
+    selector: string,
+    elementType: new () => ElementType,
+  ): ElementType[];
+}
+
 interface MathJaxApi {
   loader?: {
     load: string[];
@@ -178,6 +190,7 @@ interface Window {
   BOOK_VIEWER_DOCUMENT?: BookDocument;
   BOOK_VIEWER_CHUNKS?: Record<string, BookChunk>;
   BookViewer: BookViewerApi;
+  BookViewerDom: BookViewerDomApi;
   BookViewerPreferences: BookViewerPreferencesApi;
   MathJax?: MathJaxApi;
 }

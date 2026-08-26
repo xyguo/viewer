@@ -58,6 +58,7 @@ def test_settings_store_writes_canonical_toml_and_keyring(tmp_path: Path) -> Non
 
     document = store.update(
         {
+            "viewer.books_root": str(tmp_path / "books"),
             "translation.chat_completions_url": ("https://provider.example/v1/chat/completions"),
             "translation.model": "new model",
             "translation.api_key": "new-secret",
@@ -72,8 +73,10 @@ def test_settings_store_writes_canonical_toml_and_keyring(tmp_path: Path) -> Non
     assert document.restart_required is True
     assert credentials.api_key == "new-secret"
     assert "new-secret" not in saved_text
+    assert saved["viewer"] == {"books_root": str(tmp_path / "books")}
     assert saved["translation"]["model"] == "new model"
     generation = saved["translation"]["generation"]
+    assert set(generation) == {"max_tokens", "repeat_penalty", "top_k"}
     assert generation["max_tokens"] == 1200
     assert generation["top_k"] == 20
     assert generation["repeat_penalty"] == 1.05
@@ -116,9 +119,17 @@ def test_reset_uses_default_and_optional_blank_removes_value(tmp_path: Path) -> 
         field for field in document.fields if field.name == "translation.generation.temperature"
     )
     top_p = next(field for field in document.fields if field.name == "translation.generation.top_p")
+    saved_translation = tomllib.loads((tmp_path / "config.toml").read_text(encoding="utf-8"))[
+        "translation"
+    ]
+    saved_generation = saved_translation.get("generation", {})
 
     assert temperature.value == "0.0"
+    assert temperature.is_set is False
     assert top_p.value is None
+    assert top_p.is_set is False
+    assert "temperature" not in saved_generation
+    assert "top_p" not in saved_generation
 
 
 def test_invalid_settings_do_not_replace_existing_file_or_key(tmp_path: Path) -> None:

@@ -7,9 +7,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .builder import build_book
+from .config_file import ConfigSettingsStore, SettingsStoreError
 from .credentials import CredentialStoreError, KeyringCredentialStore
 from .library import build_book_catalog, build_catalog, validate_library, write_manifest_schema
-from .settings import load_server_settings
+from .settings import default_config_path, load_server_settings
 
 
 def create_build_parser() -> argparse.ArgumentParser:
@@ -101,6 +102,11 @@ def create_serve_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Remove the live-translation API key from the OS keyring and exit",
     )
+    parser.add_argument(
+        "--installer-books-root",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
     return parser
 
 
@@ -113,6 +119,15 @@ def run_serve(argv: Sequence[str] | None = None) -> int:
         except CredentialStoreError as error:
             parser.error(str(error))
         print("Removed the live-translation API key from the operating-system keyring.")
+        return 0
+    if args.installer_books_root is not None:
+        books_root = args.installer_books_root.expanduser().resolve()
+        try:
+            ConfigSettingsStore(default_config_path()).update(
+                {"viewer.books_root": str(books_root)}
+            )
+        except SettingsStoreError as error:
+            parser.error(str(error))
         return 0
     try:
         settings = load_server_settings(

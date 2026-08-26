@@ -6,7 +6,8 @@ Parallel Book Viewer is a lightweight static reader with a small typed Python se
 
 ## Project layout
 
-- `index.html`, `bootstrap.js`, `preferences.js`, `app.js`, and `styles.css`: generic catalog and reader frontend.
+- `index.html`, `dom.js`, `bootstrap.js`, `preferences.js`, `app.js`, `settings.js`,
+  `styles.css`, `catalog.css`, and `settings.css`: generic catalog, reader, and settings frontend.
 - `biome.json`, `jsconfig.json`, and `frontend.d.ts`: development-only frontend linting, formatting, and strict JavaScript type contracts.
 - `src/book_viewer/`: strict Pydantic models, book builder, library discovery, versioned reader-data persistence, syntax-highlighting extensions, settings, translation client, MathJax installer, HTTP server, and command-line entry points.
 - `schemas/book.schema.json`: generated, tracked manifest contract.

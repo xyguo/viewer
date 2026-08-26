@@ -6,7 +6,6 @@ import os
 import platform
 import shutil
 import subprocess
-import tomllib
 from pathlib import Path
 
 BUILD_SCRIPT = Path(__file__).parents[1] / "scripts" / "build-binary.sh"
@@ -15,7 +14,16 @@ UNINSTALL_SCRIPT = Path(__file__).parents[1] / "scripts" / "uninstall-local.sh"
 
 
 def _fake_executable(path: Path) -> None:
-    path.write_text("#!/bin/sh\necho viewer\n", encoding="utf-8")
+    path.write_text(
+        """#!/bin/sh
+if [ "${1:-}" = "--installer-books-root" ]; then
+    printf '%s\n' "$2" > "$VIEWER_INSTALL_HOME/configured-books-root"
+    exit 0
+fi
+echo viewer
+""",
+        encoding="utf-8",
+    )
     path.chmod(0o755)
 
 
@@ -98,7 +106,12 @@ def _run_fake_build(
 case " $* " in
     *" pyinstaller "*)
         mkdir -p dist
-        printf '#!/bin/sh\\necho viewer\\n' > dist/book-viewer
+        printf '%s\\n' '#!/bin/sh' \\
+            'if [ "${1:-}" = "--installer-books-root" ]; then' \\
+            '    printf '\"'\"'%s\\n'\"'\"' "$2" > "$VIEWER_INSTALL_HOME/configured-books-root"' \\
+            '    exit 0' \\
+            'fi' \\
+            'echo viewer' > dist/book-viewer
         chmod +x dist/book-viewer
         ;;
 esac
@@ -121,7 +134,7 @@ esac
     return result, user_home
 
 
-def test_installer_copies_binary_saves_config_and_sets_up_path(tmp_path: Path) -> None:
+def test_installer_copies_binary_delegates_config_and_sets_up_path(tmp_path: Path) -> None:
     binary = tmp_path / "build" / "book-viewer"
     binary.parent.mkdir()
     _fake_executable(binary)
@@ -138,13 +151,12 @@ def test_installer_copies_binary_saves_config_and_sets_up_path(tmp_path: Path) -
     )
 
     installed_binary = _installed_binary(user_home)
-    config_path, _reader_data_path = _application_paths(user_home)
     assert result.returncode == 0, result.stderr
     assert installed_binary.read_text(encoding="utf-8") == binary.read_text(encoding="utf-8")
     assert os.access(installed_binary, os.X_OK)
     assert not installed_binary.is_symlink()
-    assert config_path.read_text(encoding="utf-8") == (
-        f'schema_version = 1\n\n[viewer]\nbooks_root = "{books_root}"\n'
+    assert (user_home / "configured-books-root").read_text(encoding="utf-8").strip() == str(
+        books_root
     )
     profile = (user_home / ".zprofile").read_text(encoding="utf-8")
     assert "# >>> Parallel Book Viewer >>>" in profile
@@ -152,32 +164,13 @@ def test_installer_copies_binary_saves_config_and_sets_up_path(tmp_path: Path) -
     assert f"Remembered selected book library: {books_root}" in result.stdout
 
 
-def test_reinstall_updates_books_root_without_overwriting_other_settings(tmp_path: Path) -> None:
+def test_reinstall_passes_the_updated_books_root_without_shell_integration(tmp_path: Path) -> None:
     binary = tmp_path / "book-viewer"
     _fake_executable(binary)
     second_books_root = tmp_path / "second-books"
     second_books_root.mkdir()
-    user_home = tmp_path / "home"
-    user_home.mkdir()
-    installed_binary = _installed_binary(user_home)
-    installed_binary.parent.mkdir(parents=True)
-    _fake_executable(installed_binary)
-    config_path, _reader_data_path = _application_paths(user_home)
-    config_path.parent.mkdir(parents=True)
-    config_path.write_text(
-        f'''schema_version = 1
 
-[viewer]
-books_root = "{tmp_path / "first-books"}"
-
-[translation]
-model = "preserved-model"
-chat_completions_url = "http://localhost:8080/v1/chat/completions"
-''',
-        encoding="utf-8",
-    )
-
-    second_result, _user_home = _run_installer(
+    second_result, user_home = _run_installer(
         tmp_path,
         "--binary",
         str(binary),
@@ -187,12 +180,32 @@ chat_completions_url = "http://localhost:8080/v1/chat/completions"
     )
 
     assert second_result.returncode == 0, second_result.stderr
-    with config_path.open("rb") as config_file:
-        config = tomllib.load(config_file)
-    assert config["viewer"]["books_root"] == str(second_books_root)
-    assert config["translation"]["model"] == "preserved-model"
+    assert (user_home / "configured-books-root").read_text(encoding="utf-8").strip() == str(
+        second_books_root
+    )
     assert not (user_home / ".zprofile").exists()
     assert "Skipped PATH setup" in second_result.stdout
+
+
+def test_installer_rejects_an_outdated_binary_with_rebuild_guidance(tmp_path: Path) -> None:
+    binary = tmp_path / "book-viewer"
+    binary.write_text(
+        "#!/bin/sh\necho 'error: unrecognized arguments: --installer-books-root' >&2\nexit 2\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+
+    result, user_home = _run_installer(
+        tmp_path,
+        "--binary",
+        str(binary),
+        "--no-path",
+    )
+
+    assert result.returncode == 1
+    assert "viewer executable is out of date" in result.stderr
+    assert "scripts/build-binary.sh" in result.stderr
+    assert not _installed_binary(user_home).exists()
 
 
 def test_build_script_offers_and_runs_installer(tmp_path: Path) -> None:
